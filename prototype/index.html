@@ -129,6 +129,7 @@
     color: var(--dim); text-decoration: none;
     font-family: var(--mono); font-size: 12px;
     padding: 4px 10px; border-bottom: 2px solid transparent;
+    white-space: nowrap;
   }
   .secnav a:hover { color: var(--text); }
   .secnav a.active { color: var(--text); border-bottom-color: var(--accent); }
@@ -151,7 +152,7 @@
   .run-head { padding: 20px 0 0; }
   .lineage {
     display: flex; align-items: center; gap: 0;
-    margin-bottom: 18px; flex-wrap: wrap;
+    margin-bottom: 18px; flex-wrap: nowrap; overflow-x: auto;
   }
   .lineage .node {
     display: flex; align-items: center; gap: 8px;
@@ -292,7 +293,7 @@
   }
 
   .toast {
-    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
     background: var(--raised); border: 1px solid var(--hairline-strong);
     color: var(--text); font-family: var(--mono); font-size: 12px;
     padding: 10px 16px; z-index: 50; max-width: 90vw;
@@ -317,6 +318,7 @@
     .seg button { padding: 8px 10px; min-height: 44px; display: inline-flex; align-items: center; }
     .slider-wrap input[type="range"] { width: 110px; }
     .fig-config .check { min-height: 44px; }
+    .toast { top: 72px; }
   }
 </style>
 </head>
@@ -1156,6 +1158,10 @@ function spy() {
     const el = document.getElementById(s);
     if (el && el.offsetTop <= y) cur = s;
   }
+  // at the bottom of the page, the last section wins even if it cannot align to the top
+  if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+    cur = secs[secs.length - 1];
+  }
   document.querySelectorAll(".secnav a").forEach((a) => a.classList.toggle("active", a.dataset.sec === cur));
 }
 window.addEventListener("scroll", spy, { passive: true });
@@ -1185,17 +1191,27 @@ $("#addRunBtn").addEventListener("click", () => {
   if (!panel.hidden) $("#addRunPath").focus();
 });
 $("#addRunGo").addEventListener("click", addRunByPath);
-$("#addRunPath").addEventListener("keydown", (e) => { if (e.key === "Enter") addRunByPath(); });
+$("#addRunPath").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addRunByPath();
+  if (e.key === "Escape") {
+    $("#addRunPanel").hidden = true;
+    $("#addRunBtn").focus();
+  }
+});
 
 function addRunByPath() {
   const input = $("#addRunPath");
   let path = input.value.trim();
-  if (!path) { toast("enter a run directory path"); return; }
+  if (!path) { toast("enter a run directory path"); input.focus(); return; }
   path = path.replace(/\/+$/, ""); // normalize trailing separators
   const base = path.split("/").pop();
-  if (!base || base === "." || base === "..") { toast("path must end in a run directory name"); return; }
-  if (!/^[A-Za-z0-9._-]+$/.test(base)) { toast("run name may only contain letters, digits, dot, dash, underscore"); return; }
-  if (runById(base)) { toast("run <b>" + esc(base) + "</b> is already in the list"); input.value = ""; return; }
+  if (!base || base === "." || base === "..") { toast("path must end in a run directory name"); input.focus(); return; }
+  if (!/^[A-Za-z0-9._-]+$/.test(base)) { toast("run name may only contain letters, digits, dot, dash, underscore"); input.focus(); return; }
+  if (runById(base)) {
+    toast("run <b>" + esc(base) + "</b> is already in the list");
+    input.focus();
+    return;
+  }
   // mock: clone the anneal run's shape under the new id/path
   const src = runById("emri_c_anneal_s12");
   const run = JSON.parse(JSON.stringify(src));
@@ -1208,7 +1224,11 @@ function addRunByPath() {
   input.value = "";
   $("#addRunPanel").hidden = true;
   toast("added run <b>" + esc(base) + "</b> from " + esc(path));
-  location.hash = "#/run/" + base;
+  if (location.hash === "#/run/" + base) {
+    route(); // hash unchanged: rerender so the new run is visible now
+  } else {
+    location.hash = "#/run/" + base;
+  }
   setTimeout(() => {
     const title = document.querySelector(".run-title");
     if (title) title.setAttribute("tabindex", "-1");
@@ -1222,11 +1242,19 @@ function toast(html) {
   t.setAttribute("role", "status");
   t.setAttribute("aria-live", "polite");
   t.innerHTML = html;
-  const stack = document.querySelectorAll(".toast");
-  const offset = stack.length * 44;
-  t.style.top = (12 + offset) + "px";
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3200);
+  // measured stacking: reflow all live toasts, cap at 4
+  const live = [...document.querySelectorAll(".toast")];
+  live.forEach((el, i) => {
+    if (i >= 4) { el.remove(); return; }
+    el.style.top = (i === 0 ? 64 : 64 + i * (el.offsetHeight + 8)) + "px";
+  });
+  setTimeout(() => {
+    t.remove();
+    // reflow the remaining stack after removal
+    const rest = [...document.querySelectorAll(".toast")];
+    rest.forEach((el, i) => { el.style.top = (i === 0 ? 64 : 64 + i * (el.offsetHeight + 8)) + "px"; });
+  }, 3200);
 }
 
 window.addEventListener("hashchange", () => {
