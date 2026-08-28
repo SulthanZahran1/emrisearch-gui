@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emrisearch explorer</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --surface: #101318;
+    --raised: #15181d;
+    --hairline: #23272e;
+    --hairline-strong: #2e333c;
+    --text: #d7dae0;
+    --dim: #8b919c;
+    --faint: #5c626d;
+    --accent: #e05d6f;
+    --accent-dim: #8f3a46;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  html[data-theme="light"] {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --raised: #fafbfc;
+    --hairline: #dde0e5;
+    --hairline-strong: #c6cbd3;
+    --text: #1c2026;
+    --dim: #5c626d;
+    --faint: #9aa0aa;
+    --accent: #c23a4e;
+    --accent-dim: #a02f40;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: var(--mono); }
+  .dim { color: var(--dim); }
+  .faint { color: var(--faint); }
+  .accent { color: var(--accent); }
+
+  .app { display: grid; grid-template-columns: 300px 1fr; min-height: 100dvh; }
+
+  /* ---------- rail ---------- */
+  .rail {
+    border-right: 1px solid var(--hairline);
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    min-height: 100dvh;
+  }
+  .rail-head {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .wordmark { font-family: var(--mono); font-size: 13px; letter-spacing: 0.02em; }
+  .wordmark b { color: var(--accent); font-weight: 600; }
+  .root-path {
+    margin-top: 6px;
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .rail-actions {
+    display: flex; gap: 8px; padding: 10px 16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .icon-btn {
+    background: none; border: 1px solid var(--hairline); color: var(--dim);
+    font-family: var(--mono); font-size: 12px; padding: 4px 10px; cursor: pointer;
+    border-radius: 0;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--hairline-strong); }
+  .icon-btn:active { transform: translateY(1px); }
+  .icon-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+  .chain-group { border-bottom: 1px solid var(--hairline); }
+  .chain-label {
+    padding: 8px 16px 4px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .run-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
+    padding: 8px 16px; cursor: pointer; border-left: 2px solid transparent;
+  }
+  .run-row:hover { background: var(--raised); }
+  .run-row.active { border-left-color: var(--accent); background: var(--raised); }
+  .run-name { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+  .run-row.active .run-name { color: var(--accent); }
+  .run-kind { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .run-meta { font-family: var(--mono); font-size: 11px; color: var(--dim); text-align: right; }
+  .run-meta .ld { color: var(--faint); }
+
+  /* ---------- main ---------- */
+  .main { min-width: 0; }
+  .main-head {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg);
+    border-bottom: 1px solid var(--hairline);
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .secnav { display: flex; gap: 2px; }
+  .secnav a {
+    color: var(--dim); text-decoration: none;
+    font-family: var(--mono); font-size: 12px;
+    padding: 4px 10px; border-bottom: 2px solid transparent;
+  }
+  .secnav a:hover { color: var(--text); }
+  .secnav a.active { color: var(--text); border-bottom-color: var(--accent); }
+  .theme-toggle {
+    background: none; border: 1px solid var(--hairline); color: var(--dim);
+    font-family: var(--mono); font-size: 12px; padding: 4px 10px; cursor: pointer;
+  }
+  .theme-toggle:hover { color: var(--text); border-color: var(--hairline-strong); }
+
+  .content { padding: 0 24px 80px; max-width: 1280px; }
+
+  /* empty state */
+  .empty {
+    padding: 120px 24px; text-align: left;
+  }
+  .empty h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+  .empty p { margin-top: 10px; color: var(--dim); max-width: 52ch; }
+
+  /* run header */
+  .run-head { padding: 20px 0 0; }
+  .lineage {
+    display: flex; align-items: center; gap: 0;
+    margin-bottom: 18px; flex-wrap: wrap;
+  }
+  .lineage .node {
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: 1px solid var(--hairline);
+    color: var(--dim); font-family: var(--mono); font-size: 11.5px;
+    padding: 5px 12px; cursor: pointer;
+  }
+  .lineage .node:hover { color: var(--text); border-color: var(--hairline-strong); }
+  .lineage .node.current { border-color: var(--accent); color: var(--accent); }
+  .lineage .node .idx { color: var(--faint); }
+  .lineage .node.current .idx { color: var(--accent-dim); }
+  .lineage .arrow { color: var(--faint); font-family: var(--mono); font-size: 12px; padding: 0 8px; }
+  .run-title { font-family: var(--mono); font-size: 20px; font-weight: 500; letter-spacing: -0.01em; }
+  .run-path { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  .run-facts {
+    display: flex; flex-wrap: wrap; gap: 0;
+    margin-top: 14px; border-top: 1px solid var(--hairline);
+  }
+  .fact {
+    padding: 10px 20px 10px 0; margin-right: 20px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .fact .k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+  .fact .v { font-family: var(--mono); font-size: 13px; margin-top: 2px; }
+
+  /* sections */
+  section.block { padding: 28px 0 8px; border-bottom: 1px solid var(--hairline); }
+  .block-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+  .block-head h2 { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+  .block-head .note { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+  .kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0; }
+  .kv { padding: 7px 0; border-top: 1px solid var(--hairline); min-width: 0; }
+  .kv .k { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .kv .v { font-family: var(--mono); font-size: 12.5px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kv .v.long { white-space: normal; word-break: break-all; }
+
+  .group-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--dim);
+    margin: 22px 0 2px;
+  }
+  .group-label:first-child { margin-top: 0; }
+
+  /* tables */
+  table.data { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
+  table.data th {
+    text-align: left; font-weight: 400; color: var(--faint);
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 6px 12px 6px 0; border-bottom: 1px solid var(--hairline-strong);
+  }
+  table.data td { padding: 6px 12px 6px 0; border-bottom: 1px solid var(--hairline); }
+  table.data tr:last-child td { border-bottom: none; }
+  table.data td.num { text-align: right; }
+  table.data th.num { text-align: right; }
+  table.data .warn { color: var(--accent); }
+  table.data .ok { color: var(--dim); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  @media (max-width: 1000px) { .two-col { grid-template-columns: 1fr; gap: 24px; } }
+
+  .big-ld { font-family: var(--mono); font-size: 26px; color: var(--accent); letter-spacing: -0.02em; }
+  .stat-line { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+  .figs { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 1000px) { .figs { grid-template-columns: 1fr; } }
+  .fig { border: 1px solid var(--hairline); }
+  .fig img { width: 100%; display: block; }
+  .fig-cap { padding: 8px 12px; border-top: 1px solid var(--hairline); font-family: var(--mono); font-size: 11px; color: var(--dim); }
+
+  .legend-note { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 10px; }
+
+  @media (max-width: 768px) {
+    .app { grid-template-columns: 1fr; }
+    .rail { min-height: auto; border-right: none; border-bottom: 1px solid var(--hairline); }
+    .chain-group { border-bottom: none; }
+    .chain-label { display: none; }
+    .run-row { padding: 6px 16px; }
+    .content { padding: 0 16px 60px; }
+    .main-head { padding: 10px 16px; }
+    .secnav { overflow-x: auto; }
+    .secnav a { padding: 12px 10px; }
+    .lineage .node { min-height: 44px; }
+    .theme-toggle { padding: 10px 12px; }
+    .icon-btn { padding: 8px 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="rail-head">
+      <div class="wordmark">emri<b>search</b> explorer</div>
+      <div class="root-path" id="rootPath">/scratch/e1498138/emri_c_s12</div>
+    </div>
+    <div class="rail-actions">
+      <button class="icon-btn" id="refreshBtn" title="rescan root">rescan</button>
+      <button class="icon-btn" id="pickRootBtn" title="choose root">pick root</button>
+    </div>
+    <nav id="runList"></nav>
+  </aside>
+
+  <main class="main">
+    <div class="main-head">
+      <nav class="secnav" id="secnav">
+        <a href="#manifest" data-sec="manifest">manifest</a>
+        <a href="#best" data-sec="best">best point</a>
+        <a href="#plots" data-sec="plots">plots</a>
+      </nav>
+      <button class="theme-toggle" id="themeBtn" title="toggle theme">dark</button>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+/* ------------------------------------------------------------------
+   Prototype data. Shapes follow the verified run-dir contract
+   (manifest.json schema from ParisRun.manifest(), run.py:334-350).
+   ------------------------------------------------------------------ */
+const ROOT = "/scratch/e1498138/emri_c_s12";
+
+const RUNS = [
+  {
+    id: "emri_c_lhs_s12",
+    chain: "chain 1",
+    manifest: {
+      emrisearch_version: "0.1.0",
+      source: {
+        m1: 3.0e5, m2: 10.0, a: 0.3, p0: 12.0, e0: 0.2,
+        xI0: 0.5, dist: 1.0, qS: 1.2, phiS: 2.1, qK: 0.8, phiK: 4.0,
+        Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0
+      },
+      obs: { T: 0.5, dt: 5.0, tdi_gen: "1st_gen", use_gpu: true, pad_output: true, T_from_plunge: false, T_margin: 0.0 },
+      noise: { add: true, seed: 42 },
+      modes: { ell: 2, n_vals: [2, 2, 2], M_mode: null, N_traj: 1, mode_select: null },
+      statistic: { kind: "f_pure", N_seg: 1 },
+      space: {
+        free: [
+          { name: "log10_m1", transform: "log10", lo: 4.5, hi: 6.5 },
+          { name: "log10_m2", transform: "log10", lo: -0.5, hi: 2.0 },
+          { name: "a",        transform: "linear", lo: 0.0, hi: 0.9 },
+          { name: "p0",       transform: "linear", lo: 8.0, hi: 16.0 },
+          { name: "e0",       transform: "linear", lo: 0.0, hi: 0.5 }
+        ],
+        fixed: { xI0: 0.5, dist: 1.0, qS: 1.2, phiS: 2.1, qK: 0.8, phiK: 4.0, Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0 }
+      },
+      sampler: { n_seed: 2000, num_iterations: 1, print_iter: 100, save_every: 1000, stop_dlogZ: null, stop_max_ld_stable_iters: null, init_cov: 0.1, seed: 42 },
+      seeding: { kind: "internal_lhs", n: 2000, batch_size: 200 },
+      anneal: null,
+      out: "/scratch/e1498138/emri_c_s12/emri_c_lhs_s12"
+    },
+    result: {
+      kind: "lhs_tuple",
+      ndim: 5,
+      n_samples: 2000,
+      n_finite: 2000,
+      best: { ld: -23104.2, coords: [5.31, 1.14, 0.41, 13.2, 0.31] },
+      truth_search: [5.477, 1.0, 0.3, 12.0, 0.2],
+      n_sigma: [0.8, 1.2, 2.1, 3.4, 1.5],
+      best_per_process: [
+        { proc: 0, ld: -23104.2 }, { proc: 1, ld: -23106.8 },
+        { proc: 2, ld: -23109.1 }, { proc: 3, ld: -23112.5 }
+      ],
+      spread: 8.3
+    }
+  },
+  {
+    id: "emri_c_merge_s12",
+    chain: "chain 1",
+    manifest: {
+      emrisearch_version: "0.1.0",
+      source: {
+        m1: 3.0e5, m2: 10.0, a: 0.3, p0: 12.0, e0: 0.2,
+        xI0: 0.5, dist: 1.0, qS: 1.2, phiS: 2.1, qK: 0.8, phiK: 4.0,
+        Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0
+      },
+      obs: { T: 0.5, dt: 5.0, tdi_gen: "1st_gen", use_gpu: true, pad_output: true, T_from_plunge: false, T_margin: 0.0 },
+      noise: { add: true, seed: 42 },
+      modes: { ell: 2, n_vals: [2, 2, 2], M_mode: null, N_traj: 1, mode_select: null },
+      statistic: { kind: "f_pure", N_seg: 1 },
+      space: {
+        free: [
+          { name: "log10_m1", transform: "log10", lo: 4.5, hi: 6.5 },
+          { name: "log10_m2", transform: "log10", lo: -0.5, hi: 2.0 },
+          { name: "a",        transform: "linear", lo: 0.0, hi: 0.9 },
+          { name: "p0",       transform: "linear", lo: 8.0, hi: 16.0 },
+          { name: "e0",       transform: "linear", lo: 0.0, hi: 0.5 }
+        ],
+        fixed: { xI0: 0.5, dist: 1.0, qS: 1.2, phiS: 2.1, qK: 0.8, phiK: 4.0, Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0 }
+      },
+      sampler: { n_seed: 2000, num_iterations: 4000, print_iter: 100, save_every: 500, stop_dlogZ: 0.5, stop_max_ld_stable_iters: 200, init_cov: 0.1, merge_confidence: 0.9, alpha: 0.5, trail_size: 100, boundary_limiting: true, use_beta: true, integral_num: 1, gamma: 0.1, exclude_scale_z: "inf", use_pool: true, keep_dead_processes: false, seed: 7 },
+      seeding: { kind: "from_run", path: "../emri_c_lhs_s12", n_sigma: 3 },
+      anneal: null,
+      out: "/scratch/e1498138/emri_c_s12/emri_c_merge_s12"
+    },
+    result: {
+      kind: "parismc_sampler",
+      ndim: 5,
+      n_samples: 12500,
+      n_finite: 12483,
+      best: { ld: -22876.5, coords: [5.44, 1.03, 0.33, 12.3, 0.22] },
+      truth_search: [5.477, 1.0, 0.3, 12.0, 0.2],
+      n_sigma: [0.3, 0.5, 0.9, 1.1, 0.6],
+      best_per_process: [
+        { proc: 0, ld: -22876.5 }, { proc: 1, ld: -22876.9 },
+        { proc: 2, ld: -22877.2 }, { proc: 3, ld: -22878.0 }
+      ],
+      spread: 1.5
+    }
+  },
+  {
+    id: "emri_c_anneal_s12",
+    chain: "chain 1",
+    manifest: {
+      emrisearch_version: "0.1.0",
+      source: {
+        m1: 3.0e5, m2: 10.0, a: 0.3, p0: 12.0, e0: 0.2,
+        xI0: 0.5, dist: 1.0, qS: 1.2, phiS: 2.1, qK: 0.8, phiK: 4.0,
+        Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0
+      },
+      obs: { T: 0.5, dt: 5.0, tdi_gen: "1st_gen", use_gpu: true, pad_output: true, T_from_plunge: false, T_margin: 0.0 },
+      noise: { add: true, seed: 42 },
+      modes: { ell: 2, n_vals: [2, 2, 2], M_mode: null, N_traj: 1, mode_select: null },
+      statistic: { kind: "f_max", phase_max: true },
+      space: {
+        free: [
+          { name: "log10_m1", transform: "log10", lo: 4.5, hi: 6.5 },
+          { name: "log10_m2", transform: "log10", lo: -0.5, hi: 2.0 },
+          { name: "a",        transform: "linear", lo: 0.0, hi: 0.9 },
+          { name: "p0",       transform: "linear", lo: 8.0, hi: 16.0 },
+          { name: "e0",       transform: "linear", lo: 0.0, hi: 0.5 }
+        ],
+        fixed: { xI0: 0.5, dist: 1.0, qS: 1.2, phiS: 2.1, qK: 0.8, phiK: 4.0, Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0 }
+      },
+      sampler: { n_seed: 2000, num_iterations: 8000, print_iter: 100, save_every: 500, stop_dlogZ: 0.2, stop_max_ld_stable_iters: 300, init_cov: 0.05, merge_confidence: 0.9, alpha: 0.5, trail_size: 100, boundary_limiting: true, use_beta: true, integral_num: 1, gamma: 0.1, exclude_scale_z: "inf", use_pool: true, keep_dead_processes: false, seed: 11 },
+      seeding: { kind: "from_run", path: "../emri_c_merge_s12", n_sigma: 2 },
+      anneal: { S_schedule: [0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8], stuck_iters: 3, S_final: 12.8, stage: 7, stopped_early: false },
+      out: "/scratch/e1498138/emri_c_s12/emri_c_anneal_s12"
+    },
+    result: {
+      kind: "parismc_sampler",
+      ndim: 5,
+      n_samples: 25000,
+      n_finite: 24991,
+      best: { ld: -22103.8, coords: [5.46, 1.01, 0.31, 12.1, 0.21] },
+      truth_search: [5.477, 1.0, 0.3, 12.0, 0.2],
+      n_sigma: [0.1, 0.2, 0.3, 0.4, 0.2],
+      best_per_process: [
+        { proc: 0, ld: -22103.8 }, { proc: 1, ld: -22103.9 },
+        { proc: 2, ld: -22104.0 }, { proc: 3, ld: -22104.1 }
+      ],
+      spread: 0.3
+    }
+  },
+  {
+    id: "emri_g_merge_7d",
+    chain: "loose",
+    manifest: {
+      emrisearch_version: "0.1.0",
+      source: {
+        m1: 8.0e5, m2: 12.0, a: 0.5, p0: 11.0, e0: 0.15,
+        xI0: 0.5, dist: 1.0, qS: 1.4, phiS: 3.0, qK: 0.9, phiK: 2.2,
+        Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0
+      },
+      obs: { T: 0.5, dt: 5.0, tdi_gen: "1st_gen", use_gpu: true, pad_output: true, T_from_plunge: false, T_margin: 0.0 },
+      noise: { add: true, seed: 43 },
+      modes: { ell: 2, n_vals: [2, 2, 2], M_mode: null, N_traj: 1, mode_select: null },
+      statistic: { kind: "f_pure", N_seg: 1 },
+      space: {
+        free: [
+          { name: "log10_m1", transform: "log10", lo: 4.5, hi: 6.5 },
+          { name: "log10_m2", transform: "log10", lo: -0.5, hi: 2.0 },
+          { name: "a",        transform: "linear", lo: 0.0, hi: 0.9 },
+          { name: "p0",       transform: "linear", lo: 8.0, hi: 16.0 },
+          { name: "e0",       transform: "linear", lo: 0.0, hi: 0.5 },
+          { name: "qS",       transform: "cos",    lo: 0.0, hi: 1.0 },
+          { name: "phiS",     transform: "linear", lo: 0.0, hi: 6.283185307179586 }
+        ],
+        fixed: { xI0: 0.5, dist: 1.0, qK: 0.9, phiK: 2.2, Phi_phi0: 0.0, Phi_theta0: 0.0, Phi_r0: 0.0 }
+      },
+      sampler: { n_seed: 2000, num_iterations: 4000, print_iter: 100, save_every: 500, stop_dlogZ: 0.5, stop_max_ld_stable_iters: 200, init_cov: 0.1, merge_confidence: 0.9, alpha: 0.5, trail_size: 100, boundary_limiting: true, use_beta: true, integral_num: 1, gamma: 0.1, exclude_scale_z: "inf", use_pool: true, keep_dead_processes: false, seed: 21 },
+      seeding: { kind: "internal_lhs", n: 2000, batch_size: 200 },
+      anneal: null,
+      out: "/scratch/e1498138/emri_g_s12/emri_g_merge_7d"
+    },
+    result: {
+      kind: "parismc_sampler",
+      ndim: 7,
+      n_samples: 12000,
+      n_finite: 11902,
+      best: { ld: -31042.6, coords: [5.62, 1.08, 0.44, 11.8, 0.19, 0.42, 2.9] },
+      truth_search: [5.903, 1.079, 0.5, 11.0, 0.15, 0.352, 3.0],
+      n_sigma: [0.5, 0.7, 1.8, 2.9, 1.2, 0.9, 1.4],
+      best_per_process: [
+        { proc: 0, ld: -31042.6 }, { proc: 1, ld: -31045.2 },
+        { proc: 2, ld: -31048.9 }, { proc: 3, ld: -31055.3 }
+      ],
+      spread: 12.7
+    }
+  }
+];
+
+const CHAIN_ORDER = ["chain 1", "loose"];
+const CHAIN_LABEL = { "chain 1": "emri_c_s12", loose: "loose runs" };
+
+/* ---------- helpers ---------- */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (x, d = 2) => Number(x).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const fmtInt = (x) => Number(x).toLocaleString("en-US");
+const phys = (name, v) => {
+  if (name === "log10_m1") return (10 ** v).toExponential(1) + " Msun";
+  if (name === "log10_m2") return (10 ** v).toFixed(1) + " Msun";
+  if (name === "qS") return Math.acos(v).toFixed(3) + " rad";
+  return v.toFixed(3);
+};
+
+function runById(id) { return RUNS.find((r) => r.id === id); }
+function chainOf(run) { return RUNS.filter((r) => r.chain === run.chain); }
+function lineageOf(run) {
+  const chain = chainOf(run);
+  const order = [];
+  let cur = run;
+  while (cur) {
+    order.unshift(cur);
+    const prevPath = cur.manifest.seeding && cur.manifest.seeding.kind === "from_run" ? cur.manifest.seeding.path : null;
+    cur = prevPath ? runById(prevPath.split("/").pop()) : null;
+  }
+  // append any successors (runs whose seeding points at this one)
+  const succ = chain.filter((r) => r.manifest.seeding && r.manifest.seeding.kind === "from_run" && r.manifest.seeding.path.endsWith(run.id));
+  return order.concat(succ);
+}
+
+/* ---------- rail ---------- */
+function renderRail(activeId) {
+  const nav = $("#runList");
+  let html = "";
+  for (const c of CHAIN_ORDER) {
+    const runs = RUNS.filter((r) => r.chain === c);
+    html += `<div class="chain-group"><div class="chain-label">${esc(CHAIN_LABEL[c])}</div>`;
+    for (const r of runs) {
+      const kind = r.manifest.seeding.kind;
+      const dims = r.manifest.space.free.length;
+      html += `<div class="run-row${r.id === activeId ? " active" : ""}" data-run="${r.id}">
+        <div class="run-name">${esc(r.id)}</div>
+        <div class="run-meta">${fmt(r.result.best.ld, 1)}</div>
+        <div class="run-kind">${esc(kind)} · ${dims}d</div>
+        <div class="run-meta">${esc(r.manifest.statistic.kind)}</div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  nav.innerHTML = html;
+  nav.querySelectorAll(".run-row").forEach((row) => {
+    row.addEventListener("click", () => { location.hash = "#/run/" + row.dataset.run; });
+  });
+}
+
+/* ---------- run detail ---------- */
+function kv(k, v, long) {
+  return `<div class="kv"><div class="k">${esc(k)}</div><div class="v${long ? " long" : ""}">${v}</div></div>`;
+}
+
+function renderManifest(run) {
+  const m = run.manifest;
+  const src = m.source;
+  const srcKeys = Object.keys(src);
+  const srcHtml = srcKeys.map((k) => kv(k, fmt(src[k], 4))).join("");
+  const freeHtml = m.space.free.map((f) =>
+    `<tr><td>${esc(f.name)}</td><td>${esc(f.transform)}</td><td class="num">${fmt(f.lo, 3)}</td><td class="num">${fmt(f.hi, 3)}</td></tr>`
+  ).join("");
+  const fixedHtml = Object.entries(m.space.fixed).map(([k, v]) => kv(k, fmt(v, 3))).join("");
+  const s = m.sampler;
+  const samplerKeys = Object.keys(s).filter((k) => s[k] !== null && s[k] !== undefined);
+  const samplerHtml = samplerKeys.map((k) => kv(k, typeof s[k] === "number" ? fmt(s[k], 3) : esc(String(s[k])))).join("");
+  const seed = m.seeding;
+  const seedHtml = Object.entries(seed).map(([k, v]) => kv(k, typeof v === "number" ? fmt(v, 3) : esc(String(v)), k === "path")).join("");
+  const ann = m.anneal;
+  const annHtml = ann
+    ? Object.entries(ann).map(([k, v]) => kv(k, Array.isArray(v) ? v.join(", ") : esc(String(v)))).join("")
+    : `<div class="kv"><div class="k">anneal</div><div class="v dim">none (this stage is not annealed)</div></div>`;
+
+  return `
+  <section class="block" id="manifest">
+    <div class="block-head">
+      <h2>manifest</h2>
+      <div class="note">emrisearch ${esc(m.emrisearch_version)}</div>
+    </div>
+    <div class="group-label">source</div>
+    <div class="kv-grid">${srcHtml}</div>
+    <div class="group-label">observation / noise / modes</div>
+    <div class="kv-grid">
+      ${kv("T", fmt(m.obs.T, 2) + " yr")}${kv("dt", fmt(m.obs.dt, 1) + " s")}
+      ${kv("tdi_gen", esc(m.obs.tdi_gen))}${kv("use_gpu", String(m.obs.use_gpu))}
+      ${kv("pad_output", String(m.obs.pad_output))}${kv("T_from_plunge", String(m.obs.T_from_plunge))}
+      ${kv("noise.add", String(m.noise.add))}${kv("noise.seed", String(m.noise.seed))}
+      ${kv("ell", String(m.modes.ell))}${kv("n_vals", m.modes.n_vals.join(", "))}
+      ${kv("N_traj", String(m.modes.N_traj))}${kv("mode_select", m.modes.mode_select ? m.modes.mode_select.join(", ") : "null")}
+    </div>
+    <div class="group-label">statistic</div>
+    <div class="kv-grid">
+      ${kv("kind", esc(m.statistic.kind))}
+      ${Object.entries(m.statistic).filter(([k]) => k !== "kind").map(([k, v]) => kv(k, esc(String(v)))).join("")}
+    </div>
+    <div class="group-label">search space</div>
+    <table class="data">
+      <tr><th>param</th><th>transform</th><th class="num">lo</th><th class="num">hi</th></tr>
+      ${freeHtml}
+    </table>
+    <div class="group-label">fixed params</div>
+    <div class="kv-grid">${fixedHtml}</div>
+    <div class="group-label">sampler</div>
+    <div class="kv-grid">${samplerHtml}</div>
+    <div class="group-label">seeding</div>
+    <div class="kv-grid">${seedHtml}</div>
+    <div class="group-label">anneal</div>
+    <div class="kv-grid">${annHtml}</div>
+  </section>`;
+}
+
+function renderBest(run) {
+  const res = run.result;
+  const dims = run.manifest.space.free;
+  const bestRows = dims.map((d, i) => {
+    const ns = res.n_sigma[i];
+    const warn = ns > 2;
+    return `<tr>
+      <td>${esc(d.name)}</td>
+      <td class="num">${fmt(res.best.coords[i], 3)}</td>
+      <td class="num dim">${esc(phys(d.name, res.best.coords[i]))}</td>
+      <td class="num ${warn ? "warn" : "ok"}">${fmt(ns, 2)}</td>
+    </tr>`;
+  }).join("");
+  const procRows = res.best_per_process.map((p) =>
+    `<tr><td>proc ${p.proc}</td><td class="num">${fmt(p.ld, 1)}</td></tr>`
+  ).join("");
+  const merged = res.spread < 5;
+  const finitePct = (100 * res.n_finite / res.n_samples).toFixed(1);
+
+  return `
+  <section class="block" id="best">
+    <div class="block-head">
+      <h2>best point</h2>
+      <div class="note">search coords · physical · n_sigma to contain truth</div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="big-ld">${fmt(res.best.ld, 1)}</div>
+        <div class="stat-line">best log-density · ${esc(run.manifest.statistic.kind)}</div>
+        <table class="data" style="margin-top:16px">
+          <tr><th>param</th><th class="num">search</th><th class="num">physical</th><th class="num">n_sigma</th></tr>
+          ${bestRows}
+        </table>
+        <div class="legend-note">n_sigma = (truth - best) / sigma per dim, from n_sigma_to_contain(). Values above 2 are flagged.</div>
+      </div>
+      <div>
+        <div class="group-label">best per process</div>
+        <table class="data">
+          <tr><th>process</th><th class="num">best log-density</th></tr>
+          ${procRows}
+        </table>
+        <div class="legend-note">spread ${fmt(res.spread, 1)} · ${merged ? "processes agree, run looks merged" : "processes disagree, run is not merged"}</div>
+        <div class="group-label" style="margin-top:20px">samples</div>
+        <div class="kv-grid">
+          ${kv("total", fmtInt(res.n_samples))}
+          ${kv("finite", fmtInt(res.n_finite) + " (" + finitePct + "%)")}
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function renderPlots(run) {
+  const dims = run.manifest.space.free.length;
+  const fig = (name, cap) => `
+    <figure class="fig">
+      <img src="figs/${run.id}_${name}.png" alt="${esc(cap)}">
+      <figcaption class="fig-cap">${esc(cap)}</figcaption>
+    </figure>`;
+  return `
+  <section class="block" id="plots">
+    <div class="block-head">
+      <h2>plots</h2>
+      <div class="note">server-side matplotlib PNGs · top ${dims > 5 ? 20 : 10} searched points</div>
+    </div>
+    <div class="figs">
+      ${fig("corner", "corner plot · search secondaries, truth in crimson")}
+      ${fig("connection", "connection plot · statistic along injection to recovered")}
+    </div>
+    <div class="legend-note">connection plot renders only when the bound-statistic stack is available; otherwise the panel shows a placeholder.</div>
+  </section>`;
+}
+
+function renderDetail(run) {
+  const lineage = lineageOf(run);
+  const lineageHtml = lineage.map((r, i) => {
+    const kind = r.manifest.anneal ? "anneal" : r.manifest.seeding.kind === "from_run" ? "merge" : r.manifest.seeding.kind;
+    const label = kind === "internal_lhs" ? "lhs seed" : kind;
+    const arrow = i < lineage.length - 1 ? `<span class="arrow">→</span>` : "";
+    return `<button class="node${r.id === run.id ? " current" : ""}" data-run="${r.id}">
+      <span class="idx">${String(i + 1).padStart(2, "0")}</span>${esc(label)}
+    </button>${arrow}`;
+  }).join("");
+  const m = run.manifest;
+  const facts = [
+    ["statistic", m.statistic.kind],
+    ["T", fmt(m.obs.T, 2) + " yr"],
+    ["dims", String(m.space.free.length) + "d"],
+    ["samples", fmtInt(run.result.n_samples)],
+    ["seeding", m.seeding.kind],
+    ["anneal", m.anneal ? "S_final " + fmt(m.anneal.S_final, 1) : "none"]
+  ].map(([k, v]) => `<div class="fact"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
+
+  return `
+  <div class="run-head">
+    <div class="lineage">${lineageHtml}</div>
+    <div class="run-title">${esc(run.id)}</div>
+    <div class="run-path">${esc(m.out)}</div>
+    <div class="run-facts">${facts}</div>
+  </div>
+  ${renderManifest(run)}
+  ${renderBest(run)}
+  ${renderPlots(run)}`;
+}
+
+function renderEmpty() {
+  return `
+  <div class="empty">
+    <h1>Select a run to inspect</h1>
+    <p>Runs are discovered by scanning the root directory for manifest.json or sampler_state.pkl. Pick one from the list, or point the explorer at a different root.</p>
+  </div>`;
+}
+
+/* ---------- routing ---------- */
+function route() {
+  const m = location.hash.match(/^#\/run\/(.+)$/);
+  const content = $("#content");
+  if (!m) {
+    renderRail(null);
+    content.innerHTML = renderEmpty();
+    return;
+  }
+  const run = runById(decodeURIComponent(m[1]));
+  if (!run) { renderRail(null); content.innerHTML = renderEmpty(); return; }
+  renderRail(run.id);
+  content.innerHTML = renderDetail(run);
+  content.querySelectorAll(".lineage .node").forEach((n) => {
+    n.addEventListener("click", () => { location.hash = "#/run/" + n.dataset.run; });
+  });
+  // section nav active state
+  const secs = ["manifest", "best", "plots"];
+  const spy = () => {
+    const y = window.scrollY + 80;
+    let cur = secs[0];
+    for (const s of secs) {
+      const el = document.getElementById(s);
+      if (el && el.offsetTop <= y) cur = s;
+    }
+    document.querySelectorAll(".secnav a").forEach((a) => a.classList.toggle("active", a.dataset.sec === cur));
+  };
+  window.addEventListener("scroll", spy, { passive: true });
+  spy();
+}
+
+/* ---------- theme ---------- */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $("#themeBtn").textContent = t;
+  try { localStorage.setItem("emrisearch-theme", t); } catch (e) {}
+}
+$("#themeBtn").addEventListener("click", () => {
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+});
+$("#refreshBtn").addEventListener("click", () => { route(); });
+$("#pickRootBtn").addEventListener("click", () => { alert("prototype: root picker opens here"); });
+
+window.addEventListener("hashchange", route);
+applyTheme((() => { try { return localStorage.getItem("emrisearch-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); } catch (e) { return "dark"; } })());
+route();
+</script>
+</body>
+</html>
