@@ -48,6 +48,10 @@
 
   .app { display: grid; grid-template-columns: 300px 1fr; min-height: 100dvh; }
 
+  @media (min-width: 769px) {
+    .rail { position: sticky; top: 0; height: 100dvh; overflow-y: auto; }
+  }
+
   /* ---------- rail ---------- */
   .rail {
     border-right: 1px solid var(--hairline);
@@ -590,7 +594,7 @@ function renderRail(activeId) {
     for (const r of runs) {
       const kind = r.manifest.seeding.kind;
       const dims = r.manifest.space.free.length;
-      html += `<div class="run-row${r.id === activeId ? " active" : ""}" data-run="${r.id}" role="button" tabindex="0">
+      html += `<div class="run-row${r.id === activeId ? " active" : ""}" data-run="${r.id}" role="button" tabindex="0"${r.id === activeId ? ' aria-current="true"' : ""}>
         <div class="run-name">${esc(r.id)}</div>
         <div class="run-meta">${fmt(r.result.best.ld, 1)}</div>
         <div class="run-kind">${esc(kind)} · ${dims}d</div>
@@ -611,7 +615,7 @@ function renderRail(activeId) {
 
 /* ---------- run detail ---------- */
 function kv(k, v, long) {
-  return `<div class="kv"><div class="k">${esc(k)}</div><div class="v${long ? " long" : ""}">${v}</div></div>`;
+  return `<div class="kv"><div class="k">${esc(k)}</div><div class="v${long ? " long" : ""}" title="${esc(String(v))}">${v}</div></div>`;
 }
 
 function renderManifest(run) {
@@ -646,10 +650,10 @@ function renderManifest(run) {
       ${kv("T", fmt(m.obs.T, 2) + " yr")}${kv("dt", fmt(m.obs.dt, 1) + " s")}
       ${kv("tdi_gen", esc(m.obs.tdi_gen))}${kv("use_gpu", String(m.obs.use_gpu))}
       ${kv("pad_output", String(m.obs.pad_output))}${kv("T_from_plunge", String(m.obs.T_from_plunge))}
-      ${kv("T_margin", fmt(m.obs.T_margin, 1))}
+      ${kv("T_margin", m.obs.T_margin === undefined ? "unset" : fmt(m.obs.T_margin, 1))}
       ${kv("noise.add", String(m.noise.add))}${kv("noise.seed", String(m.noise.seed))}
       ${kv("ell", String(m.modes.ell))}${kv("n_vals", m.modes.n_vals.join(", "))}
-      ${kv("N_traj", String(m.modes.N_traj))}${kv("M_mode", m.modes.M_mode === null ? "null" : String(m.modes.M_mode))}
+      ${kv("N_traj", String(m.modes.N_traj))}${kv("M_mode", m.modes.M_mode === undefined ? "unset" : m.modes.M_mode === null ? "null" : String(m.modes.M_mode))}
       ${kv("mode_select", m.modes.mode_select ? m.modes.mode_select.join(", ") : "null")}
     </div>
     <div class="group-label">statistic</div>
@@ -811,7 +815,7 @@ function renderDetail(run) {
     const kind = r.manifest.anneal ? "anneal" : r.manifest.seeding.kind === "from_run" ? "merge" : r.manifest.seeding.kind;
     const label = kind === "internal_lhs" ? "lhs seed" : kind;
     const arrow = i < lineage.length - 1 ? `<span class="arrow">→</span>` : "";
-    return `<button class="node${r.id === run.id ? " current" : ""}" data-run="${r.id}">
+    return `<button class="node${r.id === run.id ? " current" : ""}" data-run="${r.id}"${r.id === run.id ? ' aria-current="true"' : ""}>
       <span class="idx">${String(i + 1).padStart(2, "0")}</span>${esc(label)}
     </button>${arrow}`;
   }).join("");
@@ -856,8 +860,21 @@ function route() {
     return;
   }
   let run = null;
-  try { run = runById(decodeURIComponent(m[1])); } catch (e) { run = null; }
-  if (!run) { renderRail(null); content.innerHTML = renderEmpty(); return; }
+  let requested = null;
+  try { requested = decodeURIComponent(m[1]); run = runById(requested); } catch (e) { run = null; }
+  if (!run) {
+    renderRail(null);
+    content.innerHTML = requested
+      ? `<div class="empty">
+          <h1>Run not found</h1>
+          <p><span class="mono">${esc(requested)}</span> is not in the run list. It may have been removed, or the path may be wrong.</p>
+          <p style="margin-top:14px"><a href="#" class="icon-btn" id="backToRuns" style="text-decoration:none">back to run list</a></p>
+        </div>`
+      : renderEmpty();
+    const back = content.querySelector("#backToRuns");
+    if (back) back.addEventListener("click", (e) => { e.preventDefault(); location.hash = "#/"; });
+    return;
+  }
   renderRail(run.id);
   content.innerHTML = renderDetail(run);
   content.querySelectorAll(".lineage .node").forEach((n) => {
@@ -875,6 +892,7 @@ function route() {
       } else if (act === "png") {
         const img = content.querySelector(`[data-img="${figName}"]`);
         if (img) {
+          if (img.dataset.busy) { toast("figure is re-rendering, try again in a moment"); return; }
           const a = document.createElement("a");
           a.href = img.src;
           a.download = img.src.split("/").pop();
@@ -912,15 +930,22 @@ function route() {
     const apply = () => {
       const file = fileFor();
       img.classList.add("fig-regen");
+      img.dataset.busy = "1";
       const probe = new Image();
       probe.onload = () => {
+        if (!img.isConnected) return; // run navigated away: ignore entirely
         if (probe.src !== img.dataset.pending) return; // stale probe
+        img.style.display = "";
+        const ph = img.parentNode && img.parentNode.querySelector(".fig-missing");
+        if (ph) ph.remove();
         img.src = "figs/" + file;
-        img.onload = () => img.classList.remove("fig-regen");
+        img.onload = () => { img.classList.remove("fig-regen"); delete img.dataset.busy; };
       };
       probe.onerror = () => {
+        if (!img.isConnected) return;
         if (probe.src !== img.dataset.pending) return;
         img.classList.remove("fig-regen");
+        delete img.dataset.busy;
         toast("no pre-rendered variant for this config (mock limit)");
       };
       probe.src = "figs/" + file;
@@ -1062,7 +1087,7 @@ function showCodeModal(run, figName, opts) {
     : "";
   const code = figName === "corner"
     ? `from emrisearch.run import load_run\nfrom emrisearch.plotting.corner_plot import plot_result${themeNote}${truthNote}${mockBanner}\n\nres = load_run(${JSON.stringify(out)})\nfig = plot_result(res, top_n=${opts.top_n ?? 10}, annotate=${opts.annotate === false ? "False" : "True"})\nfig.savefig("${run.id}_corner.png", dpi=150)`
-    : `from emrisearch.run import load_run\nfrom emrisearch.plotting.connection import connection${themeNote}${mockBanner}\n\nres = load_run(${JSON.stringify(out)})\nbest = res.finite().best()\ntruth = res.param_space().truth_search\nax, t, vals = connection(res.statistic, truth, best,\n                        t_range=(${opts.t_range ?? "-0.3, 1.3"}), n=${opts.n ?? 81})\nax.figure.savefig("${run.id}_connection.png", dpi=150)`;
+    : `# NOTE: needs the heavy stack (lisatools, fastlisaresponse, parismc).\n# run is the ParisRun that produced the output; load_run alone cannot\n# rebuild a bound statistic from the manifest.\nfrom emrisearch.plotting.connection import connection\n\nres = run.result()                       # or load_run(${JSON.stringify(out)})\nbest = res.finite().best                 # property, search coordinates\nspace = res.param_space()\ntruth = space.truth_search\nf = run.statistic.bind(run.data)         # bound statistic callable\nax, t, vals = connection(f, truth, best, t_range=(${opts.t_range ?? "-0.3, 1.3"}), n=${opts.n ?? 81}, space=space)\nax.figure.savefig("${run.id}_connection.png", dpi=150)`;
   const back = document.createElement("div");
   back.className = "modal-back";
   back.setAttribute("role", "dialog");
@@ -1088,6 +1113,7 @@ function showCodeModal(run, figName, opts) {
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   };
+  back._onKey = onKey;
   const trigger = document.activeElement;
   back.addEventListener("click", (e) => { if (e.target === back || e.target.dataset.close !== undefined) close(); });
   document.addEventListener("keydown", onKey, true);
@@ -1175,8 +1201,13 @@ function toast(html) {
   setTimeout(() => t.remove(), 3200);
 }
 
-window.addEventListener("hashchange", route);
-applyTheme((() => { try { return localStorage.getItem("emrisearch-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); } catch (e) { return "dark"; } })());
+window.addEventListener("hashchange", () => {
+  document.querySelectorAll(".modal-back").forEach((m) => {
+    if (m._onKey) document.removeEventListener("keydown", m._onKey, true);
+    m.remove();
+  });
+  route();
+});applyTheme((() => { try { return localStorage.getItem("emrisearch-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); } catch (e) { return "dark"; } })());
 route();
 </script>
 </body>
