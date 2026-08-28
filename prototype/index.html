@@ -70,6 +70,18 @@
     display: flex; gap: 8px; padding: 10px 16px;
     border-bottom: 1px solid var(--hairline);
   }
+  .add-run {
+    display: flex; gap: 8px; padding: 10px 16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .add-run input {
+    flex: 1; min-width: 0;
+    background: var(--bg); border: 1px solid var(--hairline);
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 6px 10px;
+  }
+  .add-run input:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .add-run input::placeholder { color: var(--faint); }
   .icon-btn {
     background: none; border: 1px solid var(--hairline); color: var(--dim);
     font-family: var(--mono); font-size: 12px; padding: 4px 10px; cursor: pointer;
@@ -248,9 +260,12 @@
     <div class="rail-actions">
       <button class="icon-btn" id="refreshBtn" title="rescan root">rescan</button>
       <button class="icon-btn" id="pickRootBtn" title="choose root">pick root</button>
-      <button class="icon-btn" id="importBtn" title="import a run archive">import run</button>
+      <button class="icon-btn" id="addRunBtn" title="add a run by folder path">add run</button>
       <input type="file" id="rootInput" webkitdirectory directory multiple style="display:none">
-      <input type="file" id="importInput" accept=".zip,.tar,.tar.gz,.tgz" style="display:none">
+    </div>
+    <div class="add-run" id="addRunPanel" hidden>
+      <input type="text" id="addRunPath" placeholder="/scratch/e1498138/emri_c_s12/emri_c_anneal_s12" spellcheck="false">
+      <button class="icon-btn" id="addRunGo">add</button>
     </div>
     <nav id="runList"></nav>
   </aside>
@@ -738,15 +753,34 @@ $("#rootInput").addEventListener("change", (e) => {
   }
   e.target.value = "";
 });
-$("#importBtn").addEventListener("click", () => { $("#importInput").click(); });
-$("#importInput").addEventListener("change", (e) => {
-  const f = e.target.files && e.target.files[0];
-  if (f) {
-    toast("imported <b>" + esc(f.name) + "</b> (mock: run appears in the list)");
-    location.hash = "#/run/emri_c_anneal_s12";
-  }
-  e.target.value = "";
+$("#addRunBtn").addEventListener("click", () => {
+  const panel = $("#addRunPanel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) $("#addRunPath").focus();
 });
+$("#addRunGo").addEventListener("click", addRunByPath);
+$("#addRunPath").addEventListener("keydown", (e) => { if (e.key === "Enter") addRunByPath(); });
+
+function addRunByPath() {
+  const input = $("#addRunPath");
+  const path = input.value.trim();
+  if (!path) { toast("enter a run directory path"); return; }
+  const base = path.split("/").pop();
+  if (!base) { toast("path must end in a run directory name"); return; }
+  if (runById(base)) { toast("run <b>" + esc(base) + "</b> is already in the list"); input.value = ""; return; }
+  // mock: clone the anneal run's shape under the new id/path
+  const src = runById("emri_c_anneal_s12");
+  const run = JSON.parse(JSON.stringify(src));
+  run.id = base;
+  run.chain = "loose";
+  run.manifest.out = path;
+  run.manifest.seeding = { kind: "from_run", path: "../emri_c_merge_s12", n_sigma: 2 };
+  RUNS.push(run);
+  input.value = "";
+  $("#addRunPanel").hidden = true;
+  toast("added run <b>" + esc(base) + "</b> from " + esc(path));
+  location.hash = "#/run/" + base;
+}
 
 function toast(html) {
   const t = document.createElement("div");
