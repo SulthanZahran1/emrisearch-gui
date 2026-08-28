@@ -575,15 +575,24 @@ function lineageOf(run) {
     anc.unshift(cur);
     cur = seedTarget(cur) ? runById(seedTarget(cur)) : null;
   }
-  // descendants, transitively, across ALL runs (not just the same chain label)
+  // descendants, transitively: a run is a descendant iff the selected run
+  // appears in its own ancestor chain (siblings seeding from the same parent
+  // are NOT descendants)
   const desc = [];
   let changed = true;
   while (changed) {
     changed = false;
     for (const r of RUNS) {
       if (anc.includes(r) || desc.includes(r)) continue;
-      const p = seedTarget(r);
-      if (p && (anc.some((x) => x.id === p) || desc.some((x) => x.id === p))) { desc.push(r); changed = true; }
+      const seen2 = new Set();
+      let c = r;
+      let isDesc = false;
+      while (c && !seen2.has(c.id)) {
+        seen2.add(c.id);
+        if (c.id === run.id) { isDesc = true; break; }
+        c = seedTarget(c) ? runById(seedTarget(c)) : null;
+      }
+      if (isDesc) { desc.push(r); changed = true; }
     }
   }
   return anc.concat(desc);
@@ -1152,6 +1161,11 @@ document.querySelectorAll(".secnav a").forEach((a) => {
   });
 });
 function spy() {
+  const hasSections = secs.some((s) => document.getElementById(s));
+  if (!hasSections) {
+    document.querySelectorAll(".secnav a").forEach((a) => a.classList.remove("active"));
+    return;
+  }
   const y = window.scrollY + 80;
   let cur = secs[0];
   for (const s of secs) {
@@ -1191,6 +1205,9 @@ $("#addRunBtn").addEventListener("click", () => {
   if (!panel.hidden) $("#addRunPath").focus();
 });
 $("#addRunGo").addEventListener("click", addRunByPath);
+$("#addRunGo").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { $("#addRunPanel").hidden = true; $("#addRunBtn").focus(); }
+});
 $("#addRunPath").addEventListener("keydown", (e) => {
   if (e.key === "Enter") addRunByPath();
   if (e.key === "Escape") {
@@ -1212,13 +1229,15 @@ function addRunByPath() {
     input.focus();
     return;
   }
-  // mock: clone the anneal run's shape under the new id/path
+  // mock: clone the anneal run's shape under the new id/path, but as a
+  // merge-stage run (from_run seeding, no anneal schedule)
   const src = runById("emri_c_anneal_s12");
   const run = JSON.parse(JSON.stringify(src));
   run.id = base;
   run.chain = "loose";
   run.manifest.out = path;
   run.manifest.seeding = { kind: "from_run", path: "../emri_c_merge_s12", n_sigma: 2 };
+  delete run.manifest.anneal;
   run.result.plots = "unavailable";
   RUNS.push(run);
   input.value = "";
@@ -1243,18 +1262,20 @@ function toast(html) {
   t.setAttribute("aria-live", "polite");
   t.innerHTML = html;
   document.body.appendChild(t);
-  // measured stacking: reflow all live toasts, cap at 4
-  const live = [...document.querySelectorAll(".toast")];
-  live.forEach((el, i) => {
-    if (i >= 4) { el.remove(); return; }
-    el.style.top = (i === 0 ? 64 : 64 + i * (el.offsetHeight + 8)) + "px";
+  reflowToasts();
+  setTimeout(() => { t.remove(); reflowToasts(); }, 3200);
+}
+function reflowToasts() {
+  // cap: keep the NEWEST 4, drop the oldest
+  let live = [...document.querySelectorAll(".toast")];
+  while (live.length > 4) live.shift().remove();
+  live = [...document.querySelectorAll(".toast")];
+  // cumulative stacking: each toast starts 8px after the previous one's bottom
+  let y = 64;
+  live.forEach((el) => {
+    el.style.top = y + "px";
+    y += el.offsetHeight + 8;
   });
-  setTimeout(() => {
-    t.remove();
-    // reflow the remaining stack after removal
-    const rest = [...document.querySelectorAll(".toast")];
-    rest.forEach((el, i) => { el.style.top = (i === 0 ? 64 : 64 + i * (el.offsetHeight + 8)) + "px"; });
-  }, 3200);
 }
 
 window.addEventListener("hashchange", () => {
