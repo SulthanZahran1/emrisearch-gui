@@ -206,6 +206,22 @@
 
   .legend-note { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 10px; }
 
+  .fig-missing {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 200px; color: var(--faint);
+    font-family: var(--mono); font-size: 12px;
+    border: 1px dashed var(--hairline-strong); margin: 0;
+  }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--raised); border: 1px solid var(--hairline-strong);
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 10px 16px; z-index: 50; max-width: 90vw;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  }
+  .toast b { color: var(--accent); font-weight: 600; }
+
   @media (max-width: 768px) {
     .app { grid-template-columns: 1fr; }
     .rail { min-height: auto; border-right: none; border-bottom: 1px solid var(--hairline); }
@@ -232,6 +248,9 @@
     <div class="rail-actions">
       <button class="icon-btn" id="refreshBtn" title="rescan root">rescan</button>
       <button class="icon-btn" id="pickRootBtn" title="choose root">pick root</button>
+      <button class="icon-btn" id="importBtn" title="import a run archive">import run</button>
+      <input type="file" id="rootInput" webkitdirectory directory multiple style="display:none">
+      <input type="file" id="importInput" accept=".zip,.tar,.tar.gz,.tgz" style="display:none">
     </div>
     <nav id="runList"></nav>
   </aside>
@@ -612,7 +631,7 @@ function renderPlots(run) {
   const dims = run.manifest.space.free.length;
   const fig = (name, cap) => `
     <figure class="fig">
-      <img src="figs/${run.id}_${name}.png" alt="${esc(cap)}">
+      <img src="figs/${run.id}_${name}.png" alt="${esc(cap)}" onerror="this.outerHTML='<div class=&quot;fig-missing&quot;>${esc(name === "connection" ? "connection plot unavailable: bound-statistic stack not present" : "figure not found")}</div>'">
       <figcaption class="fig-cap">${esc(cap)}</figcaption>
     </figure>`;
   return `
@@ -709,8 +728,33 @@ function applyTheme(t) {
 $("#themeBtn").addEventListener("click", () => {
   applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
-$("#refreshBtn").addEventListener("click", () => { route(); });
-$("#pickRootBtn").addEventListener("click", () => { alert("prototype: root picker opens here"); });
+$("#refreshBtn").addEventListener("click", () => { route(); toast("rescanned " + ROOT); });
+$("#pickRootBtn").addEventListener("click", () => { $("#rootInput").click(); });
+$("#rootInput").addEventListener("change", (e) => {
+  const files = [...(e.target.files || [])];
+  const dirs = new Set(files.map((f) => f.webkitRelativePath.split("/")[0]));
+  if (dirs.size) {
+    toast("root set to <b>" + esc([...dirs][0]) + "</b> (mock: run list unchanged)");
+  }
+  e.target.value = "";
+});
+$("#importBtn").addEventListener("click", () => { $("#importInput").click(); });
+$("#importInput").addEventListener("change", (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (f) {
+    toast("imported <b>" + esc(f.name) + "</b> (mock: run appears in the list)");
+    location.hash = "#/run/emri_c_anneal_s12";
+  }
+  e.target.value = "";
+});
+
+function toast(html) {
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.innerHTML = html;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
 
 window.addEventListener("hashchange", route);
 applyTheme((() => { try { return localStorage.getItem("emrisearch-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); } catch (e) { return "dark"; } })());
