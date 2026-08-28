@@ -27,7 +27,7 @@
     --hairline-strong: #c6cbd3;
     --text: #1c2026;
     --dim: #4b515c;
-    --faint: #6b7280;
+    --faint: #5f6672;
     --accent: #c23a4e;
     --accent-dim: #a02f40;
   }
@@ -74,6 +74,7 @@
     display: flex; gap: 8px; padding: 10px 16px;
     border-bottom: 1px solid var(--hairline);
   }
+  .add-run[hidden] { display: none; }
   .add-run input {
     flex: 1; min-width: 0;
     background: var(--bg); border: 1px solid var(--hairline);
@@ -103,7 +104,8 @@
   }
   .run-row:hover { background: var(--raised); }
   .run-row.active { border-left-color: var(--accent); background: var(--raised); }
-  .run-name { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+  .run-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .run-name { font-family: var(--mono); font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .run-row.active .run-name { color: var(--accent); }
   .run-kind { font-family: var(--mono); font-size: 10px; color: var(--faint); }
   .run-meta { font-family: var(--mono); font-size: 11px; color: var(--dim); text-align: right; }
@@ -158,8 +160,8 @@
   .lineage .node .idx { color: var(--faint); }
   .lineage .node.current .idx { color: var(--accent-dim); }
   .lineage .arrow { color: var(--faint); font-family: var(--mono); font-size: 12px; padding: 0 8px; }
-  .run-title { font-family: var(--mono); font-size: 20px; font-weight: 500; letter-spacing: -0.01em; }
-  .run-path { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  .run-title { font-family: var(--mono); font-size: 20px; font-weight: 500; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+  .run-path { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-top: 4px; overflow-wrap: anywhere; }
   .run-facts {
     display: flex; flex-wrap: wrap; gap: 0;
     margin-top: 14px; border-top: 1px solid var(--hairline);
@@ -304,8 +306,12 @@
     .secnav { overflow-x: auto; }
     .secnav a { padding: 12px 10px; }
     .lineage .node { min-height: 44px; }
-    .theme-toggle { padding: 10px 12px; }
-    .icon-btn { padding: 8px 12px; }
+    .theme-toggle { padding: 10px 12px; min-height: 44px; display: inline-flex; align-items: center; }
+    .icon-btn { padding: 8px 12px; min-height: 44px; display: inline-flex; align-items: center; }
+    .fig-actions button, .fig-actions a { padding: 8px 10px; min-height: 44px; display: inline-flex; align-items: center; }
+    .seg button { padding: 8px 10px; min-height: 44px; display: inline-flex; align-items: center; }
+    .slider-wrap input[type="range"] { width: 110px; }
+    .fig-config .check { min-height: 44px; }
   }
 </style>
 </head>
@@ -551,15 +557,26 @@ function chainOf(run) { return RUNS.filter((r) => r.chain === run.chain); }
 function lineageOf(run) {
   const chain = chainOf(run);
   const order = [];
+  // ancestors, oldest first (follow from_run pointers backward)
+  const anc = [];
   let cur = run;
   while (cur) {
-    order.unshift(cur);
-    const prevPath = cur.manifest.seeding && cur.manifest.seeding.kind === "from_run" ? cur.manifest.seeding.path : null;
-    cur = prevPath ? runById(prevPath.split("/").pop()) : null;
+    anc.unshift(cur);
+    const p = cur.manifest.seeding && cur.manifest.seeding.kind === "from_run" ? cur.manifest.seeding.path.split("/").pop() : null;
+    cur = p ? runById(p) : null;
   }
-  // append any successors (runs whose seeding points at this one)
-  const succ = chain.filter((r) => r.manifest.seeding && r.manifest.seeding.kind === "from_run" && r.manifest.seeding.path.endsWith(run.id));
-  return order.concat(succ);
+  // descendants, transitively (any run seeding from an already-included run)
+  const desc = [];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const r of chain) {
+      if (anc.includes(r) || desc.includes(r)) continue;
+      const p = r.manifest.seeding && r.manifest.seeding.kind === "from_run" ? r.manifest.seeding.path.split("/").pop() : null;
+      if (p && (anc.some((x) => x.id === p) || desc.some((x) => x.id === p))) { desc.push(r); changed = true; }
+    }
+  }
+  return anc.concat(desc);
 }
 
 /* ---------- rail ---------- */
@@ -572,7 +589,7 @@ function renderRail(activeId) {
     for (const r of runs) {
       const kind = r.manifest.seeding.kind;
       const dims = r.manifest.space.free.length;
-      html += `<div class="run-row${r.id === activeId ? " active" : ""}" data-run="${r.id}">
+      html += `<div class="run-row${r.id === activeId ? " active" : ""}" data-run="${r.id}" role="button" tabindex="0">
         <div class="run-name">${esc(r.id)}</div>
         <div class="run-meta">${fmt(r.result.best.ld, 1)}</div>
         <div class="run-kind">${esc(kind)} · ${dims}d</div>
@@ -583,7 +600,11 @@ function renderRail(activeId) {
   }
   nav.innerHTML = html;
   nav.querySelectorAll(".run-row").forEach((row) => {
-    row.addEventListener("click", () => { location.hash = "#/run/" + row.dataset.run; });
+    const go = () => { location.hash = "#/run/" + row.dataset.run; };
+    row.addEventListener("click", go);
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+    });
   });
 }
 
@@ -602,8 +623,8 @@ function renderManifest(run) {
   ).join("");
   const fixedHtml = Object.entries(m.space.fixed).map(([k, v]) => kv(k, fmt(v, 3))).join("");
   const s = m.sampler;
-  const samplerKeys = Object.keys(s).filter((k) => s[k] !== null && s[k] !== undefined);
-  const samplerHtml = samplerKeys.map((k) => kv(k, typeof s[k] === "number" ? fmt(s[k], 3) : esc(String(s[k])))).join("");
+  const samplerKeys = Object.keys(s).filter((k) => s[k] !== undefined);
+  const samplerHtml = samplerKeys.map((k) => kv(k, s[k] === null ? "null" : typeof s[k] === "number" ? fmt(s[k], 3) : esc(String(s[k])))).join("");
   const seed = m.seeding;
   const seedHtml = Object.entries(seed).map(([k, v]) => kv(k, typeof v === "number" ? fmt(v, 3) : esc(String(v)), k === "path")).join("");
   const ann = m.anneal;
@@ -624,9 +645,11 @@ function renderManifest(run) {
       ${kv("T", fmt(m.obs.T, 2) + " yr")}${kv("dt", fmt(m.obs.dt, 1) + " s")}
       ${kv("tdi_gen", esc(m.obs.tdi_gen))}${kv("use_gpu", String(m.obs.use_gpu))}
       ${kv("pad_output", String(m.obs.pad_output))}${kv("T_from_plunge", String(m.obs.T_from_plunge))}
+      ${kv("T_margin", fmt(m.obs.T_margin, 1))}
       ${kv("noise.add", String(m.noise.add))}${kv("noise.seed", String(m.noise.seed))}
       ${kv("ell", String(m.modes.ell))}${kv("n_vals", m.modes.n_vals.join(", "))}
-      ${kv("N_traj", String(m.modes.N_traj))}${kv("mode_select", m.modes.mode_select ? m.modes.mode_select.join(", ") : "null")}
+      ${kv("N_traj", String(m.modes.N_traj))}${kv("M_mode", m.modes.M_mode === null ? "null" : String(m.modes.M_mode))}
+      ${kv("mode_select", m.modes.mode_select ? m.modes.mode_select.join(", ") : "null")}
     </div>
     <div class="group-label">statistic</div>
     <div class="kv-grid">
@@ -706,6 +729,10 @@ function renderPlots(run) {
     const defSrc = name === "corner"
       ? `figs/${run.id}_corner_default_top10_a1_t1.png`
       : `figs/${run.id}_connection_default_n81_t-3_13.png`;
+    const unavailable = run.result.plots === "unavailable";
+    const body = unavailable
+      ? `<div class="fig-missing">plots unavailable: no pre-rendered figures for this run</div>`
+      : `<img src="${defSrc}" alt="${esc(cap)}" data-img="${name}" onerror="this.outerHTML='<div class=&quot;fig-missing&quot;>${esc(name === "connection" ? "connection plot unavailable: bound-statistic stack not present" : "figure not found")}</div>'">`;
     return `
     <figure class="fig">
       <div class="fig-head">
@@ -719,7 +746,7 @@ function renderPlots(run) {
       <div class="fig-config" data-config="${name}" hidden>
         ${cfg}
       </div>
-      <img src="${defSrc}" alt="${esc(cap)}" data-img="${name}" onerror="this.outerHTML='<div class=&quot;fig-missing&quot;>${esc(name === "connection" ? "connection plot unavailable: bound-statistic stack not present" : "figure not found")}</div>'">
+      ${body}
       <figcaption class="fig-cap">${esc(cap)}</figcaption>
     </figure>`;
   };
@@ -816,14 +843,16 @@ function renderEmpty() {
 
 /* ---------- routing ---------- */
 function route() {
-  const m = location.hash.match(/^#\/run\/(.+)$/);
+  let m = null;
+  try { m = location.hash.match(/^#\/run\/(.+)$/); } catch (e) { m = null; }
   const content = $("#content");
   if (!m) {
     renderRail(null);
     content.innerHTML = renderEmpty();
     return;
   }
-  const run = runById(decodeURIComponent(m[1]));
+  let run = null;
+  try { run = runById(decodeURIComponent(m[1])); } catch (e) { run = null; }
   if (!run) { renderRail(null); content.innerHTML = renderEmpty(); return; }
   renderRail(run.id);
   content.innerHTML = renderDetail(run);
@@ -869,15 +898,21 @@ function route() {
   content.querySelectorAll(".fig-config").forEach((panel) => {
     const figName = panel.dataset.config;
     const img = content.querySelector(`[data-img="${figName}"]`);
+    if (!img) return;
     const state = { theme: "default", top_n: 10, annotate: true, truth: true, n: 81, t0: -3, t1: 13 };
+    const fileFor = () => figName === "corner"
+      ? `${run.id}_corner_${state.theme}_top${state.top_n}_a${state.annotate ? 1 : 0}_t${state.truth ? 1 : 0}.png`
+      : `${run.id}_connection_${state.theme}_n${state.n}_t${state.t0}_${state.t1}.png`;
     const apply = () => {
-      if (!img) return;
-      const file = figName === "corner"
-        ? `${run.id}_corner_${state.theme}_top${state.top_n}_a${state.annotate ? 1 : 0}_t${state.truth ? 1 : 0}.png`
-        : `${run.id}_connection_${state.theme}_n${state.n}_t${state.t0}_${state.t1}.png`;
+      const file = fileFor();
       img.classList.add("fig-regen");
-      img.src = "figs/" + file;
-      img.onload = () => img.classList.remove("fig-regen");
+      const probe = new Image();
+      probe.onload = () => { img.src = "figs/" + file; img.onload = () => img.classList.remove("fig-regen"); };
+      probe.onerror = () => {
+        img.classList.remove("fig-regen");
+        toast("no pre-rendered variant for this config (mock limit)");
+      };
+      probe.src = "figs/" + file;
     };
     panel.querySelectorAll("[data-seg]").forEach((seg) => {
       seg.addEventListener("click", (e) => {
@@ -898,9 +933,15 @@ function route() {
     panel.querySelectorAll("input[type='range']").forEach((sl) => {
       const key = sl.dataset.opt;
       const valEl = panel.querySelector(`[data-val="${key}"]`);
+      const snap = (v) => {
+        const allowed = key === "top_n" ? [10, 20, 50, 100] : [41, 81, 161];
+        return allowed.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+      };
       sl.addEventListener("input", () => {
-        state[key] = parseInt(sl.value, 10);
-        if (valEl) valEl.textContent = sl.value;
+        const v = snap(parseInt(sl.value, 10));
+        sl.value = String(v);
+        state[key] = v;
+        if (valEl) valEl.textContent = String(v);
         apply();
       });
     });
@@ -912,6 +953,45 @@ function route() {
       });
     });
   });
+  // app theme -> plot theme sync (only when the user has not chosen a plot theme)
+  const syncPlotThemes = () => {
+    const appTheme = document.documentElement.dataset.theme;
+    content.querySelectorAll(".fig-config").forEach((panel) => {
+      const seg = panel.querySelector('[data-seg="theme"]');
+      if (!seg) return;
+      const chosen = seg.dataset.chosen;
+      if (chosen) return;
+      const target = appTheme === "dark" ? "dark" : "default";
+      const btn = seg.querySelector(`button[data-v="${target}"]`);
+      if (btn && !btn.classList.contains("on")) {
+        seg.querySelectorAll("button").forEach((b) => b.classList.remove("on"));
+        btn.classList.add("on");
+        const panel2 = panel;
+        const img = content.querySelector(`[data-img="${panel2.dataset.config}"]`);
+        if (img) {
+          const st = { theme: target, top_n: 10, annotate: true, truth: true, n: 81, t0: -3, t1: 13 };
+          const sl = panel2.querySelector('input[type="range"]');
+          if (sl) st[sl.dataset.opt] = parseInt(sl.value, 10);
+          const tBtn = panel2.querySelector('[data-seg="t_range"] button.on');
+          if (tBtn) { const [a, b] = tBtn.dataset.v.split(",").map((s) => parseFloat(s.trim())); st.t0 = Math.round(a * 10); st.t1 = Math.round(b * 10); }
+          panel2.querySelectorAll("input[type='checkbox']").forEach((cb) => { st[cb.dataset.opt] = cb.checked; });
+          const file = panel2.dataset.config === "corner"
+            ? `${run.id}_corner_${st.theme}_top${st.top_n}_a${st.annotate ? 1 : 0}_t${st.truth ? 1 : 0}.png`
+            : `${run.id}_connection_${st.theme}_n${st.n}_t${st.t0}_${st.t1}.png`;
+          img.src = "figs/" + file;
+        }
+      }
+    });
+  };
+  const themeBtn = $("#themeBtn");
+  if (themeBtn && !themeBtn.dataset.synced) {
+    themeBtn.dataset.synced = "1";
+    themeBtn.addEventListener("click", () => setTimeout(syncPlotThemes, 0));
+  }
+  // mark a plot theme as user-chosen on first manual click
+  content.querySelectorAll('[data-seg="theme"]').forEach((seg) => {
+    seg.addEventListener("click", () => { seg.dataset.chosen = "1"; }, { once: true });
+  });
   spy();
 }
 
@@ -920,8 +1000,11 @@ function showCodeModal(run, figName, opts) {
   const out = run.manifest.out;
   const theme = opts.theme || "default";
   const themeNote = theme === "default" ? "" : `\n# theme: ${theme} (matplotlib rcParams)`;
+  const truthNote = figName === "corner" && opts.truth === false
+    ? `\n# truth lines off: upstream corner_frame(truth=True) draws them; the GUI\n# hides them by post-processing the figure (mock-only in this prototype)`
+    : "";
   const code = figName === "corner"
-    ? `from emrisearch.run import load_run\nfrom emrisearch.plotting.corner_plot import plot_result${themeNote}\n\nres = load_run(${JSON.stringify(out)})\nfig = plot_result(res, top_n=${opts.top_n ?? 10}, annotate=${opts.annotate ?? true})\nfig.savefig("${run.id}_corner.png", dpi=150)`
+    ? `from emrisearch.run import load_run\nfrom emrisearch.plotting.corner_plot import plot_result${themeNote}${truthNote}\n\nres = load_run(${JSON.stringify(out)})\nfig = plot_result(res, top_n=${opts.top_n ?? 10}, annotate=${opts.annotate === false ? "False" : "True"})\nfig.savefig("${run.id}_corner.png", dpi=150)`
     : `from emrisearch.run import load_run\nfrom emrisearch.plotting.connection import connection${themeNote}\n\nres = load_run(${JSON.stringify(out)})\nbest = res.finite().best()\ntruth = res.param_space().truth_search\nax, t, vals = connection(res.statistic, truth, best,\n                        t_range=(${opts.t_range ?? "-0.3, 1.3"}), n=${opts.n ?? 81})\nax.figure.savefig("${run.id}_connection.png", dpi=150)`;
   const back = document.createElement("div");
   back.className = "modal-back";
@@ -990,6 +1073,7 @@ function addRunByPath() {
   if (!path) { toast("enter a run directory path"); return; }
   const base = path.split("/").pop();
   if (!base) { toast("path must end in a run directory name"); return; }
+  if (!/^[A-Za-z0-9._-]+$/.test(base)) { toast("run name may only contain letters, digits, dot, dash, underscore"); return; }
   if (runById(base)) { toast("run <b>" + esc(base) + "</b> is already in the list"); input.value = ""; return; }
   // mock: clone the anneal run's shape under the new id/path
   const src = runById("emri_c_anneal_s12");
@@ -998,6 +1082,7 @@ function addRunByPath() {
   run.chain = "loose";
   run.manifest.out = path;
   run.manifest.seeding = { kind: "from_run", path: "../emri_c_merge_s12", n_sigma: 2 };
+  run.result.plots = "unavailable";
   RUNS.push(run);
   input.value = "";
   $("#addRunPanel").hidden = true;
