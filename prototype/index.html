@@ -178,7 +178,7 @@
 
   /* sections */
   section.block { padding: 28px 0 8px; border-bottom: 1px solid var(--hairline); scroll-margin-top: 64px; }
-  .block-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+  .block-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 4px 12px; }
   .block-head h2 { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
   .block-head .note { font-family: var(--mono); font-size: 11px; color: var(--faint); }
 
@@ -292,7 +292,7 @@
   }
 
   .toast {
-    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
     background: var(--raised); border: 1px solid var(--hairline-strong);
     color: var(--text); font-family: var(--mono); font-size: 12px;
     padding: 10px 16px; z-index: 50; max-width: 90vw;
@@ -334,7 +334,7 @@
       <input type="file" id="rootInput" webkitdirectory directory multiple style="display:none">
     </div>
     <div class="add-run" id="addRunPanel" hidden>
-      <input type="text" id="addRunPath" placeholder="/scratch/e1498138/emri_c_s12/emri_c_anneal_s12" spellcheck="false">
+      <input type="text" id="addRunPath" placeholder="/scratch/e1498138/emri_c_s12/emri_c_anneal_s12" spellcheck="false" aria-label="Run directory path">
       <button class="icon-btn" id="addRunGo">add</button>
     </div>
     <nav id="runList"></nav>
@@ -560,6 +560,10 @@ const phys = (name, v) => {
 function runById(id) { return RUNS.find((r) => r.id === id); }
 function chainOf(run) { return RUNS.filter((r) => r.chain === run.chain); }
 function lineageOf(run) {
+  const seedTarget = (r) => {
+    if (!r.manifest.seeding || r.manifest.seeding.kind !== "from_run") return null;
+    return r.manifest.seeding.path.replace(/\/+$/, "").split("/").pop() || null;
+  };
   // ancestors, oldest first (follow from_run pointers backward, cycle-safe)
   const anc = [];
   const seen = new Set();
@@ -567,8 +571,7 @@ function lineageOf(run) {
   while (cur && !seen.has(cur.id)) {
     seen.add(cur.id);
     anc.unshift(cur);
-    const p = cur.manifest.seeding && cur.manifest.seeding.kind === "from_run" ? cur.manifest.seeding.path.split("/").pop() : null;
-    cur = p ? runById(p) : null;
+    cur = seedTarget(cur) ? runById(seedTarget(cur)) : null;
   }
   // descendants, transitively, across ALL runs (not just the same chain label)
   const desc = [];
@@ -577,7 +580,7 @@ function lineageOf(run) {
     changed = false;
     for (const r of RUNS) {
       if (anc.includes(r) || desc.includes(r)) continue;
-      const p = r.manifest.seeding && r.manifest.seeding.kind === "from_run" ? r.manifest.seeding.path.split("/").pop() : null;
+      const p = seedTarget(r);
       if (p && (anc.some((x) => x.id === p) || desc.some((x) => x.id === p))) { desc.push(r); changed = true; }
     }
   }
@@ -939,7 +942,8 @@ function route() {
         const ph = img.parentNode && img.parentNode.querySelector(".fig-missing");
         if (ph) ph.remove();
         img.src = "figs/" + file;
-        img.onload = () => { img.classList.remove("fig-regen"); delete img.dataset.busy; };
+        delete img.dataset.busy; // only the owning probe clears busy
+        img.onload = () => img.classList.remove("fig-regen"); // visual only
       };
       probe.onerror = () => {
         if (!img.isConnected) return;
@@ -1057,13 +1061,21 @@ function syncPlotThemes() {
       ? `${runId}_corner_${st.theme}_top${st.top_n}_a${st.annotate ? 1 : 0}_t${st.truth ? 1 : 0}.png`
       : `${runId}_connection_${st.theme}_n${st.n}_t${st.t0}_${st.t1}.png`;
     img.classList.add("fig-regen");
+    img.dataset.busy = "1";
     const probe = new Image();
     probe.onload = () => {
+      if (!img.isConnected) return;
       if (probe.src !== img.dataset.pending) return;
       img.src = "figs/" + file;
+      delete img.dataset.busy;
       img.onload = () => img.classList.remove("fig-regen");
     };
-    probe.onerror = () => img.classList.remove("fig-regen");
+    probe.onerror = () => {
+      if (!img.isConnected) return;
+      if (probe.src !== img.dataset.pending) return;
+      img.classList.remove("fig-regen");
+      delete img.dataset.busy;
+    };
     probe.src = "figs/" + file;
     img.dataset.pending = probe.src;
   });
@@ -1073,6 +1085,12 @@ if (themeBtn && !themeBtn.dataset.synced) {
   themeBtn.dataset.synced = "1";
   themeBtn.addEventListener("click", () => setTimeout(syncPlotThemes, 0));
 }
+// cross-tab theme reconciliation
+window.addEventListener("storage", (e) => {
+  if (e.key !== "emrisearch-theme" || !e.newValue) return;
+  applyTheme(e.newValue);
+  setTimeout(syncPlotThemes, 0);
+});
 
 function showCodeModal(run, figName, opts) {
   opts = opts || {};
@@ -1191,12 +1209,22 @@ function addRunByPath() {
   $("#addRunPanel").hidden = true;
   toast("added run <b>" + esc(base) + "</b> from " + esc(path));
   location.hash = "#/run/" + base;
+  setTimeout(() => {
+    const title = document.querySelector(".run-title");
+    if (title) title.setAttribute("tabindex", "-1");
+    if (title) title.focus();
+  }, 50);
 }
 
 function toast(html) {
   const t = document.createElement("div");
   t.className = "toast";
+  t.setAttribute("role", "status");
+  t.setAttribute("aria-live", "polite");
   t.innerHTML = html;
+  const stack = document.querySelectorAll(".toast");
+  const offset = stack.length * 44;
+  t.style.top = (12 + offset) + "px";
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3200);
 }
