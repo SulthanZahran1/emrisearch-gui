@@ -296,7 +296,7 @@
     position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
     background: var(--raised); border: 1px solid var(--hairline-strong);
     color: var(--text); font-family: var(--mono); font-size: 12px;
-    padding: 10px 16px; z-index: 50; max-width: 90vw;
+    padding: 10px 16px; z-index: 70; max-width: 90vw;
     box-shadow: 0 8px 24px rgba(0,0,0,0.25);
   }
   .toast b { color: var(--accent); font-weight: 600; }
@@ -319,6 +319,11 @@
     .slider-wrap input[type="range"] { width: 110px; }
     .fig-config .check { min-height: 44px; }
     .toast { top: 72px; }
+    .modal-head button { min-height: 44px; }
+  }
+  @media (max-width: 360px) {
+    .secnav a { padding: 12px 6px; font-size: 11px; }
+    .main-head { padding: 10px 10px; gap: 8px; }
   }
 </style>
 </head>
@@ -875,13 +880,15 @@ function route() {
   }
   let run = null;
   let requested = null;
-  try { requested = decodeURIComponent(m[1]); run = runById(requested); } catch (e) { run = null; }
+  let decodeFailed = false;
+  try { requested = decodeURIComponent(m[1]); run = runById(requested); } catch (e) { decodeFailed = true; run = null; }
   if (!run) {
     renderRail(null);
-    content.innerHTML = requested
+    const shown = decodeFailed ? m[1] : requested;
+    content.innerHTML = shown
       ? `<div class="empty">
           <h1>Run not found</h1>
-          <p><span class="mono">${esc(requested)}</span> is not in the run list. It may have been removed, or the path may be wrong.</p>
+          <p><span class="mono">${esc(shown)}</span> is not in the run list. It may have been removed, or the path may be wrong.</p>
           <p style="margin-top:14px"><a href="#" class="icon-btn" id="backToRuns" style="text-decoration:none">back to run list</a></p>
         </div>`
       : renderEmpty();
