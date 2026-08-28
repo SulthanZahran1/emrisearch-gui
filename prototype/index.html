@@ -13,7 +13,7 @@
     --hairline-strong: #2e333c;
     --text: #d7dae0;
     --dim: #8b919c;
-    --faint: #5c626d;
+    --faint: #7a8190;
     --accent: #e05d6f;
     --accent-dim: #8f3a46;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -26,8 +26,8 @@
     --hairline: #dde0e5;
     --hairline-strong: #c6cbd3;
     --text: #1c2026;
-    --dim: #5c626d;
-    --faint: #9aa0aa;
+    --dim: #4b515c;
+    --faint: #6b7280;
     --accent: #c23a4e;
     --accent-dim: #a02f40;
   }
@@ -166,7 +166,6 @@
   }
   .fact {
     padding: 10px 20px 10px 0; margin-right: 20px;
-    border-bottom: 1px solid var(--hairline);
   }
   .fact .k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
   .fact .v { font-family: var(--mono); font-size: 13px; margin-top: 2px; }
@@ -230,19 +229,27 @@
   .fig-actions button:hover, .fig-actions a:hover { color: var(--text); border-color: var(--hairline-strong); }
   .fig-config {
     border-bottom: 1px solid var(--hairline); padding: 10px 12px;
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
   }
   .fig-config label {
     display: flex; flex-direction: column; gap: 4px;
     font-family: var(--mono); font-size: 10px; color: var(--faint);
     text-transform: uppercase; letter-spacing: 0.08em;
   }
-  .fig-config select, .fig-config input[type="text"] {
-    background: var(--bg); border: 1px solid var(--hairline); color: var(--text);
-    font-family: var(--mono); font-size: 12px; padding: 4px 6px;
-  }
   .fig-config .check { flex-direction: row; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--dim); }
   .fig-config .check input { accent-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--hairline); }
+  .seg button {
+    background: none; border: none; border-right: 1px solid var(--hairline);
+    color: var(--dim); font-family: var(--mono); font-size: 11px;
+    padding: 4px 10px; cursor: pointer;
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button:hover { color: var(--text); }
+  .seg button.on { background: var(--accent); color: var(--bg); }
+  .slider-wrap { display: flex; align-items: center; gap: 8px; }
+  .slider-wrap input[type="range"] { accent-color: var(--accent); width: 120px; }
+  .slider-wrap .val { font-size: 12px; color: var(--text); min-width: 3ch; }
   .fig-regen { opacity: 0.35; transition: opacity 0.2s; }
 
   .modal-back {
@@ -695,37 +702,64 @@ function renderBest(run) {
 }
 
 function renderPlots(run) {
-  const dims = run.manifest.space.free.length;
-  const fig = (name, cap, cfg) => `
+  const fig = (name, cap, cfg) => {
+    const defSrc = name === "corner"
+      ? `figs/${run.id}_corner_default_top10_a1_t1.png`
+      : `figs/${run.id}_connection_default_n81_t-3_13.png`;
+    return `
     <figure class="fig">
       <div class="fig-head">
         <span class="fig-title">${esc(name)}</span>
         <span class="fig-actions">
           <button data-act="config" data-fig="${name}">config</button>
-          <a href="figs/${run.id}_${name}.png" download="${run.id}_${name}.png" data-act="png">png</a>
+          <a href="#" data-act="png" data-fig="${name}">png</a>
           <button data-act="code" data-fig="${name}">code</button>
         </span>
       </div>
       <div class="fig-config" data-config="${name}" hidden>
         ${cfg}
       </div>
-      <img src="figs/${run.id}_${name}.png" alt="${esc(cap)}" data-img="${name}" onerror="this.outerHTML='<div class=&quot;fig-missing&quot;>${esc(name === "connection" ? "connection plot unavailable: bound-statistic stack not present" : "figure not found")}</div>'">
+      <img src="${defSrc}" alt="${esc(cap)}" data-img="${name}" onerror="this.outerHTML='<div class=&quot;fig-missing&quot;>${esc(name === "connection" ? "connection plot unavailable: bound-statistic stack not present" : "figure not found")}</div>'">
       <figcaption class="fig-cap">${esc(cap)}</figcaption>
     </figure>`;
+  };
   const cornerCfg = `
-    <label>top_n <select data-opt="top_n">
-      <option>10</option><option>20</option><option>50</option><option>100</option>
-    </select></label>
-    <label>title <input type="text" data-opt="title" value="top 10 search points  (f_max)"></label>
+    <label>theme
+      <span class="seg" data-seg="theme">
+        <button data-v="default" class="on">default</button>
+        <button data-v="dark">dark</button>
+        <button data-v="paper">paper</button>
+      </span>
+    </label>
+    <label>top_n
+      <span class="slider-wrap">
+        <input type="range" data-opt="top_n" min="10" max="100" step="10" value="10">
+        <span class="val" data-val="top_n">10</span>
+      </span>
+    </label>
     <label class="check"><input type="checkbox" data-opt="annotate" checked> annotate points</label>
     <label class="check"><input type="checkbox" data-opt="truth" checked> truth lines</label>`;
   const connCfg = `
-    <label>n <select data-opt="n">
-      <option>41</option><option>81</option><option>161</option>
-    </select></label>
-    <label>t_range <input type="text" data-opt="t_range" value="-0.3, 1.3"></label>
-    <label>ylabel <input type="text" data-opt="ylabel" value="statistic"></label>
-    <label class="check"><input type="checkbox" data-opt="progress" checked> progress</label>`;
+    <label>theme
+      <span class="seg" data-seg="theme">
+        <button data-v="default" class="on">default</button>
+        <button data-v="dark">dark</button>
+        <button data-v="paper">paper</button>
+      </span>
+    </label>
+    <label>n
+      <span class="slider-wrap">
+        <input type="range" data-opt="n" min="41" max="161" step="40" value="81">
+        <span class="val" data-val="n">81</span>
+      </span>
+    </label>
+    <label>t_range
+      <span class="seg" data-seg="t_range">
+        <button data-v="-0.3, 1.3" class="on">-0.3, 1.3</button>
+        <button data-v="-0.5, 1.5">-0.5, 1.5</button>
+        <button data-v="0.0, 1.0">0.0, 1.0</button>
+      </span>
+    </label>`;
   return `
   <section class="block" id="plots">
     <div class="block-head">
@@ -736,7 +770,7 @@ function renderPlots(run) {
       ${fig("corner", "corner plot · search secondaries, truth in crimson", cornerCfg)}
       ${fig("connection", "connection plot · statistic along injection to recovered", connCfg)}
     </div>
-    <div class="legend-note">config changes re-render the figure server-side (mock: dims the image). png downloads the current render; code shows the exact upstream call.</div>
+    <div class="legend-note">config changes re-render the figure server-side (mock: swaps a pre-rendered variant). png downloads the current render; code shows the exact upstream call.</div>
   </section>`;
 }
 
@@ -796,38 +830,99 @@ function route() {
   content.querySelectorAll(".lineage .node").forEach((n) => {
     n.addEventListener("click", () => { location.hash = "#/run/" + n.dataset.run; });
   });
-  // plot actions: config toggle, regen dim, code modal
+  // plot actions: config toggle, png download, code modal
   content.querySelectorAll("[data-act]").forEach((el) => {
     el.addEventListener("click", (e) => {
+      e.preventDefault();
       const act = el.dataset.act;
       const figName = el.dataset.fig;
       if (act === "config") {
         const panel = content.querySelector(`[data-config="${figName}"]`);
         if (panel) panel.hidden = !panel.hidden;
+      } else if (act === "png") {
+        const img = content.querySelector(`[data-img="${figName}"]`);
+        if (img) {
+          const a = document.createElement("a");
+          a.href = img.src;
+          a.download = img.src.split("/").pop();
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
       } else if (act === "code") {
-        showCodeModal(run, figName);
+        const panel = content.querySelector(`[data-config="${figName}"]`);
+        const opts = {};
+        if (panel) {
+          const themeBtn = panel.querySelector('[data-seg="theme"] button.on');
+          if (themeBtn) opts.theme = themeBtn.dataset.v;
+          const sl = panel.querySelector('input[type="range"]');
+          if (sl) opts[sl.dataset.opt] = parseInt(sl.value, 10);
+          const tBtn = panel.querySelector('[data-seg="t_range"] button.on');
+          if (tBtn) opts.t_range = tBtn.dataset.v;
+          panel.querySelectorAll("input[type='checkbox']").forEach((cb) => { opts[cb.dataset.opt] = cb.checked; });
+        }
+        showCodeModal(run, figName, opts);
       }
     });
   });
+  // config -> output coupling: every change swaps the figure to the matching variant
   content.querySelectorAll(".fig-config").forEach((panel) => {
-    panel.addEventListener("change", (e) => {
-      const img = content.querySelector(`[data-img="${panel.dataset.config}"]`);
-      if (img) {
-        img.classList.add("fig-regen");
-        setTimeout(() => img.classList.remove("fig-regen"), 600);
-      }
+    const figName = panel.dataset.config;
+    const img = content.querySelector(`[data-img="${figName}"]`);
+    const state = { theme: "default", top_n: 10, annotate: true, truth: true, n: 81, t0: -3, t1: 13 };
+    const apply = () => {
+      if (!img) return;
+      const file = figName === "corner"
+        ? `${run.id}_corner_${state.theme}_top${state.top_n}_a${state.annotate ? 1 : 0}_t${state.truth ? 1 : 0}.png`
+        : `${run.id}_connection_${state.theme}_n${state.n}_t${state.t0}_${state.t1}.png`;
+      img.classList.add("fig-regen");
+      img.src = "figs/" + file;
+      img.onload = () => img.classList.remove("fig-regen");
+    };
+    panel.querySelectorAll("[data-seg]").forEach((seg) => {
+      seg.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        seg.querySelectorAll("button").forEach((b) => b.classList.remove("on"));
+        btn.classList.add("on");
+        const key = seg.dataset.seg;
+        if (key === "theme") state.theme = btn.dataset.v;
+        else if (key === "t_range") {
+          const [a, b] = btn.dataset.v.split(",").map((s) => parseFloat(s.trim()));
+          state.t0 = Math.round(a * 10);
+          state.t1 = Math.round(b * 10);
+        }
+        apply();
+      });
+    });
+    panel.querySelectorAll("input[type='range']").forEach((sl) => {
+      const key = sl.dataset.opt;
+      const valEl = panel.querySelector(`[data-val="${key}"]`);
+      sl.addEventListener("input", () => {
+        state[key] = parseInt(sl.value, 10);
+        if (valEl) valEl.textContent = sl.value;
+        apply();
+      });
+    });
+    panel.querySelectorAll("input[type='checkbox']").forEach((cb) => {
+      const key = cb.dataset.opt;
+      cb.addEventListener("change", () => {
+        state[key] = cb.checked;
+        apply();
+      });
     });
   });
   spy();
 }
 
-function showCodeModal(run, figName) {
-  const m = run.manifest;
-  const out = m.out;
-  const stat = m.statistic.kind;
+function showCodeModal(run, figName, opts) {
+  opts = opts || {};
+  const out = run.manifest.out;
+  const theme = opts.theme || "default";
+  const themeNote = theme === "default" ? "" : `\n# theme: ${theme} (matplotlib rcParams)`;
   const code = figName === "corner"
-    ? `from emrisearch.run import load_run\nfrom emrisearch.plotting.corner_plot import plot_result\n\nres = load_run(${JSON.stringify(out)})\nfig = plot_result(res, top_n=10, annotate=True)\nfig.savefig("${run.id}_corner.png", dpi=150)`
-    : `from emrisearch.run import load_run\nfrom emrisearch.plotting.connection import connection\n\nres = load_run(${JSON.stringify(out)})\nbest = res.finite().best()\ntruth = res.param_space().truth_search\nax, t, vals = connection(res.statistic, truth, best,\n                        t_range=(-0.3, 1.3), n=81)\nax.figure.savefig("${run.id}_connection.png", dpi=150)`;
+    ? `from emrisearch.run import load_run\nfrom emrisearch.plotting.corner_plot import plot_result${themeNote}\n\nres = load_run(${JSON.stringify(out)})\nfig = plot_result(res, top_n=${opts.top_n ?? 10}, annotate=${opts.annotate ?? true})\nfig.savefig("${run.id}_corner.png", dpi=150)`
+    : `from emrisearch.run import load_run\nfrom emrisearch.plotting.connection import connection${themeNote}\n\nres = load_run(${JSON.stringify(out)})\nbest = res.finite().best()\ntruth = res.param_space().truth_search\nax, t, vals = connection(res.statistic, truth, best,\n                        t_range=(${opts.t_range ?? "-0.3, 1.3"}), n=${opts.n ?? 81})\nax.figure.savefig("${run.id}_connection.png", dpi=150)`;
   const back = document.createElement("div");
   back.className = "modal-back";
   back.innerHTML = `
