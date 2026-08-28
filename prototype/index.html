@@ -172,7 +172,7 @@
   .fact .v { font-family: var(--mono); font-size: 13px; margin-top: 2px; }
 
   /* sections */
-  section.block { padding: 28px 0 8px; border-bottom: 1px solid var(--hairline); }
+  section.block { padding: 28px 0 8px; border-bottom: 1px solid var(--hairline); scroll-margin-top: 64px; }
   .block-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
   .block-head h2 { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
   .block-head .note { font-family: var(--mono); font-size: 11px; color: var(--faint); }
@@ -719,20 +719,28 @@ function route() {
   content.querySelectorAll(".lineage .node").forEach((n) => {
     n.addEventListener("click", () => { location.hash = "#/run/" + n.dataset.run; });
   });
-  // section nav active state
-  const secs = ["manifest", "best", "plots"];
-  const spy = () => {
-    const y = window.scrollY + 80;
-    let cur = secs[0];
-    for (const s of secs) {
-      const el = document.getElementById(s);
-      if (el && el.offsetTop <= y) cur = s;
-    }
-    document.querySelectorAll(".secnav a").forEach((a) => a.classList.toggle("active", a.dataset.sec === cur));
-  };
-  window.addEventListener("scroll", spy, { passive: true });
   spy();
 }
+
+/* section nav: scroll only, never touch the hash (hash owns the run route) */
+const secs = ["manifest", "best", "plots"];
+document.querySelectorAll(".secnav a").forEach((a) => {
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    const el = document.getElementById(a.dataset.sec);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+});
+function spy() {
+  const y = window.scrollY + 80;
+  let cur = secs[0];
+  for (const s of secs) {
+    const el = document.getElementById(s);
+    if (el && el.offsetTop <= y) cur = s;
+  }
+  document.querySelectorAll(".secnav a").forEach((a) => a.classList.toggle("active", a.dataset.sec === cur));
+}
+window.addEventListener("scroll", spy, { passive: true });
 
 /* ---------- theme ---------- */
 function applyTheme(t) {
