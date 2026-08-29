@@ -150,7 +150,10 @@ def _manifest(path: Path, seed: int, seeding: Optional[Mapping[str, Any]] = None
         "seeding": dict(
             seeding or {"kind": "internal_lhs", "n": 32, "batch_size": 8}
         ),
-        "out": str(path.resolve(strict=False)),
+        # Fixtures write a relative out so same-seed manifests are byte-identical
+        # across directories (upstream's absolute `out`, run.py:300, depends on
+        # where the run lives). Tests that inspect `out` use the run path.
+        "out": ".",
     }
 
 

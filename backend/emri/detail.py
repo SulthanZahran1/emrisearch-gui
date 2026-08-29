@@ -268,6 +268,15 @@ def _read_manifest(path: Path) -> Optional[dict]:
     return dict(value)
 
 
+def _manifest_ndim(manifest: Optional[Mapping[str, Any]]) -> int:
+    """Dimension count from a manifest's ``space.free`` list, best effort."""
+    try:
+        free = manifest.get("space", {}).get("free", [])
+        return int(len(free))
+    except Exception:
+        return 0
+
+
 class LightRunResult:
     """Numpy-only equivalent of the useful part of upstream ``RunResult``."""
 
@@ -469,7 +478,20 @@ def _load_light_result(path: os.PathLike | str) -> LightRunResult:
             npz_candidates = sorted(original.glob("*.npz"))
             if npz_candidates:
                 return _npz_result(npz_candidates[0], manifest)
-            raise FileNotFoundError(f"{original} contains no {STATE_NAME}")
+            # A manifest-backed directory with no state file is still a valid
+            # run view: summarize_run already reads the manifest alone, and
+            # upstream permits manifest-only stages (run.py:317-332 writes the
+            # manifest before and after execution). Return an empty result so
+            # build_detail yields counts 0/0 and unset diagnostics instead of
+            # raising.
+            ndim = _manifest_ndim(manifest)
+            return LightRunResult(
+                np.empty((0, ndim), dtype=float),
+                np.empty(0, dtype=float),
+                manifest=manifest,
+                path=original,
+                kind="manifest_only",
+            )
     else:
         state_path = original
 
@@ -637,9 +659,14 @@ def n_sigma_to_contain(
     sigma = None
     try:
         finite_result = result.finite()
-        covariance = np.asarray(finite_result.posterior_covariance(), dtype=float)
-        diagonal = np.diag(covariance)
-        sigma = np.sqrt(np.clip(diagonal, 0.0, None))
+        # Zero-sample results (manifest-only runs) have an empty covariance:
+        # every dimension stays unset rather than producing NaN rows.
+        if len(finite_result.samples) == 0:
+            sigma = np.empty(0, dtype=float)
+        else:
+            covariance = np.asarray(finite_result.posterior_covariance(), dtype=float)
+            diagonal = np.diag(covariance)
+            sigma = np.sqrt(np.clip(diagonal, 0.0, None))
     except Exception:
         sigma = None
 
