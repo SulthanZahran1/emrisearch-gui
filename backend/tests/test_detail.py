@@ -136,14 +136,10 @@ def test_build_detail_handles_legacy_state_only_runs(tmp_path, kind):
     assert all(row.truth == UNSET and row.n_sigma == UNSET for row in detail.n_sigma_to_contain.rows)
 
 
-@pytest.mark.xfail(
-    reason=(
-        "build_detail currently propagates FileNotFoundError from load_result "
-        "when a manifest-backed directory has no state file"
-    ),
-    strict=False,
-)
 def test_manifest_only_detail_has_empty_counts_and_unset_diagnostics(tmp_path):
+    # build_detail returns an empty result for a manifest-backed directory
+    # with no state file (upstream permits manifest-only stages: the manifest
+    # is written before and after execution, run.py:408/433).
     run = make_manifest_run(tmp_path / "manifest-only", kind="lhs_tuple", seed=0)
     (run / "sampler_state.pkl").unlink()
 
@@ -151,5 +147,9 @@ def test_manifest_only_detail_has_empty_counts_and_unset_diagnostics(tmp_path):
 
     assert detail.n_samples == detail.n_finite == 0
     assert detail.best.log_density is None
-    assert detail.diagnostics.n_sigma_to_contain.rows == ()
+    # Diagnostics keep the per-dimension table shape (docs/data-layer.md):
+    # rows mirror the 5 free dimensions, all values "unset" with no sigma.
+    assert detail.diagnostics.n_sigma_to_contain.rows
+    assert len(detail.diagnostics.n_sigma_to_contain.rows) == 5
+    assert all(row.sigma == UNSET and row.n_sigma == UNSET for row in detail.diagnostics.n_sigma_to_contain.rows)
     assert detail.diagnostics.best_per_process.status == UNSET

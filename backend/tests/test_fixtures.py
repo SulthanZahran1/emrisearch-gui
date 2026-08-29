@@ -30,14 +30,10 @@ def test_each_manifest_fixture_writes_both_expected_files(tmp_path, kind):
     assert (run / "sampler_state.pkl").is_file()
 
 
-@pytest.mark.xfail(
-    reason=(
-        "manifest out is currently an absolute fixture-directory path, so the "
-        "same-seed manifests are not byte-identical across directories"
-    ),
-    strict=False,
-)
 def test_same_seed_manifests_are_byte_identical_across_directories(tmp_path):
+    # Fixtures write a relative "out" (".", upstream's field name is absolute
+    # only because ParisRun resolves the output path, run.py:300), so a
+    # same-seed manifest must be byte-identical wherever the fixture lives.
     first = make_manifest_run(tmp_path / "first", kind="lhs_tuple", seed=11)
     second = make_manifest_run(tmp_path / "second", kind="lhs_tuple", seed=11)
 

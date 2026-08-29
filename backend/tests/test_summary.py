@@ -101,5 +101,7 @@ def test_manifest_from_run_pointer_is_exposed_for_lineage_wiring(tmp_path):
     assert summary.id == "stage_01"
     assert summary.from_run == "../stage_00"
     assert summary.kind == "from_run"
-    assert summary.out == str(child.resolve())
+    # out is the manifest field verbatim (".", the fixture's relative value),
+    # exactly as a real run's absolute out is surfaced without rewriting.
+    assert summary.out == "."
     assert parent.name in summary.from_run
