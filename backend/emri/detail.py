@@ -156,6 +156,10 @@ class LightParamSpace:
     def truth_search(self) -> np.ndarray:
         values = []
         for param in self.free:
+            if param.name not in self.truth and param.search_coord in self.truth:
+                value = _number(self.truth[param.search_coord])
+                values.append(np.nan if value is None else value)
+                continue
             physical = self._truth_value(param)
             if physical is None:
                 values.append(np.nan)
