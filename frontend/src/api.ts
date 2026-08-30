@@ -1,9 +1,8 @@
 import type { LineageResponse, RunDetail, RunSummary, RunsResponse } from "./types";
 
-const configuredBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
-
 export function apiUrl(path: string): string {
-  return `${configuredBase}${path}`;
+  // Keep browser requests same-origin; Vite proxies /api during development.
+  return path;
 }
 
 export function encodedRunPath(runId: string, suffix = ""): string {

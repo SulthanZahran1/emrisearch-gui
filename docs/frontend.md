@@ -31,17 +31,21 @@ cd frontend
 npm run dev
 ```
 
-The Vite server proxies requests beginning with `/api` to
-`http://127.0.0.1:8000`. The proxy keeps browser requests same-origin from the
-frontend's point of view. If the backend runs elsewhere, set the documented Vite
-override before starting Vite:
+The frontend always requests relative `/api` paths. During development, Vite
+proxies those requests to `http://127.0.0.1:8000` by default, keeping the browser
+request same-origin. `VITE_API_BASE_URL` configures this Vite proxy target only;
+it is not used as a browser-side API base URL. If the backend runs on another
+port, set the variable before starting Vite. For example, with a backend on
+port `8766` and Vite on `5176`:
 
 ```bash
-VITE_API_BASE_URL=http://127.0.0.1:9000 npm run dev
+VITE_API_BASE_URL=http://127.0.0.1:8766 npm run dev -- --host 127.0.0.1 --port 5176
 ```
 
-Production normally leaves `VITE_API_BASE_URL` unset so the browser uses
-same-origin relative `/api` URLs.
+The production build also uses same-origin relative `/api` URLs; the Vite dev
+proxy does not apply to production. Serve the built frontend and backend from
+the same origin (as described below), and do not use `VITE_API_BASE_URL` to point
+browser requests at a separate origin.
 
 ## Production build
 
