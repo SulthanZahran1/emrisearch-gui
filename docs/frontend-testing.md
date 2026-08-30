@@ -39,6 +39,8 @@ run tree and stops the server on exit.
 ```bash
 cd frontend
 npm run build
+# Run this once on machines without a cached Playwright browser.
+npx playwright install chromium
 npm run browser-smoke
 ```
 
