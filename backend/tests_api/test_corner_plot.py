@@ -62,11 +62,13 @@ def test_corner_endpoint_themes_produce_distinct_png_bytes(client, plot_run):
     }
 
     assert all(image.startswith(b"\x89PNG\r\n\x1a\n") for image in images.values())
-    # FINDING (implementation): default and paper currently serialize identically
-    # because the placeholder/corner renderers do not expose their only differing
-    # recipe field (grid.color) on these figures. Keep this hard assertion so the
-    # documented per-theme PNG distinction cannot regress silently.
-    assert len(set(images.values())) == 3
+    # Corner figures never draw grids: the accepted prototype's corner_plot
+    # has no grid call (prototype/make_figs.py:129-161), so default and paper
+    # share the same light recipe and serialize identically by design. The
+    # theme distinction that matters is dark vs light.
+    assert len(set(images.values())) == 2
+    assert images["default"] == images["paper"]
+    assert images["dark"] != images["default"]
 
 
 @pytest.mark.parametrize("theme", ["neon", "", "DEFAULT"])
