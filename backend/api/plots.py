@@ -280,7 +280,21 @@ def placeholder_png(theme: Any, message: str) -> bytes:
     recipe = THEMES[theme_name]
     with plt.rc_context(recipe["rc"]):
         fig, ax = plt.subplots(figsize=(5.2, 3.4))
-        ax.set_axis_off()
+        # Match the accepted prototype's connection-figure grid semantics
+        # (prototype/make_figs.py connection_plot: grid on for default/dark,
+        # off for paper) so the placeholder is theme-distinct exactly like the
+        # real figure would be.
+        if recipe["grid"]:
+            ax.grid(alpha=0.15, lw=0.5)
+        else:
+            ax.grid(False)
+        # Gridlines draw at tick positions; give the placeholder a few ticks so
+        # the default/dark grid is actually visible (and paper stays gridless).
+        ax.set_xticks([0.2, 0.5, 0.8])
+        ax.set_yticks([0.2, 0.5, 0.8])
+        ax.tick_params(length=0, labelleft=False, labelbottom=False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
         ax.text(
             0.5,
             0.56,
