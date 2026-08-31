@@ -1,4 +1,11 @@
-import type { LineageResponse, RunDetail, RunSummary, RunsResponse } from "./types";
+import type {
+  ConfigPreviewResponse,
+  ConfigSaveResponse,
+  LineageResponse,
+  RunDetail,
+  RunSummary,
+  RunsResponse,
+} from "./types";
 
 export function apiUrl(path: string): string {
   // Keep browser requests same-origin; Vite proxies /api during development.
@@ -79,5 +86,29 @@ export function addRun(path: string): Promise<RunSummary> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),
+  });
+}
+
+export function getCanonicalConfig(signal?: AbortSignal): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>("/api/configs/canonical", { signal });
+}
+
+export function previewConfig(config: Record<string, unknown>): Promise<ConfigPreviewResponse> {
+  return requestJson<ConfigPreviewResponse>("/api/configs/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ config }),
+  });
+}
+
+export function saveConfig(
+  config: Record<string, unknown>,
+  artifactDir: string,
+  overwrite: boolean,
+): Promise<ConfigSaveResponse> {
+  return requestJson<ConfigSaveResponse>("/api/configs/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ config, artifact_dir: artifactDir, overwrite }),
   });
 }

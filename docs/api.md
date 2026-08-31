@@ -144,7 +144,21 @@ All API errors use this shape:
 
 Unknown ids return **404** with exactly
 `{"detail": "run not found: <id>"}`. Invalid query/body data and invalid run
-markers return **422**.
+markers return **422**. Config-builder validation failures return **422** with
+field-qualified detail (for example `"out: must not be empty; obs.dt: must be
+at most 10 seconds..."`), and save collisions against existing artifact files
+return **409**.
+
+## Config artifact generation
+
+The generate-only config builder is documented in `docs/config-builder.md`.
+Endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/configs/canonical` | Canonical EMRI-C preset with explicit defaults. |
+| `POST /api/configs/preview` | Validate and render deterministic Python/PBS artifacts in memory; never writes. |
+| `POST /api/configs/save` | Validate, render, and write both artifacts to an explicit `artifact_dir` (no-overwrite by default, `overwrite: true` opt-in). |
 
 ## Serialization
 

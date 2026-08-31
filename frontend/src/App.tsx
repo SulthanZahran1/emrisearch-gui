@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { addRun, ApiError, getLineage, getRunDetail, listRuns } from "./api";
 import { AppShell } from "./components/AppShell";
+import { ConfigBuilder } from "./components/ConfigBuilder";
 import { RunDetailView } from "./components/RunDetailView";
 import { RunRail } from "./components/RunRail";
 import { LoadingState, StatePanel } from "./components/States";
@@ -53,6 +54,7 @@ function initialTheme(): Theme {
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
+  const [view, setView] = useState<"explorer" | "config-builder">("explorer");
   const [selectedId, navigate] = useRunRoute();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [listWarnings, setListWarnings] = useState<string[]>([]);
@@ -177,7 +179,9 @@ export default function App() {
   const hasLoadedRuns = !listLoading;
 
   let content: React.ReactNode;
-  if (showListError) {
+  if (view === "config-builder") {
+    content = <ConfigBuilder />;
+  } else if (showListError) {
     content = <StatePanel title="API unavailable" message={listError ?? "The run list could not be loaded."} actionLabel="retry" onAction={() => void refreshRuns()} tone="error" />;
   } else if (!selectedId) {
     if (listLoading) {
@@ -224,7 +228,9 @@ export default function App() {
     <AppShell
       theme={theme}
       hasRun={Boolean(detail && selectedId)}
+      view={view}
       onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+      onToggleView={() => setView((current: "explorer" | "config-builder") => current === "explorer" ? "config-builder" : "explorer")}
       rail={(
         <RunRail
           runs={runs}

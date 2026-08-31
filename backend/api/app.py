@@ -20,17 +20,25 @@ from pydantic import BaseModel
 from starlette.types import Scope
 
 from backend.emri import (
+    ArtifactConflictError,
+    ArtifactPathError,
+    ConfigValidationError,
     PlotTheme,
     RunSummary,
     build_detail,
+    build_artifacts,
+    canonical_config,
     chain_of,
     connection_request,
     corner_request,
+    generate_config_artifacts,
     get_scan_warnings,
+    normalize_config,
     register_run_path,
     resolve_run_roots,
     scan_run_root,
     summarize_run,
+    write_artifacts,
 )
 
 from .plots import connection_png, corner_png
@@ -44,6 +52,20 @@ class AddRunRequest(BaseModel):
     """Request body for registering an additional run directory."""
 
     path: str
+
+
+class ArtifactPreviewRequest(BaseModel):
+    """Request body for generating config/artifact previews without writes."""
+
+    config: dict[str, Any]
+
+
+class ArtifactSaveRequest(BaseModel):
+    """Request body for generating and writing artifacts to an explicit path."""
+
+    config: dict[str, Any]
+    artifact_dir: str
+    overwrite: bool = False
 
 
 @dataclass(frozen=True)
@@ -293,6 +315,66 @@ async def add_run(payload: AddRunRequest) -> JSONResponse:
     return JSONResponse(
         status_code=200 if already_registered else 201,
         content=serialize_run_summary(summary),
+    )
+
+
+def _artifact_config_errors(exc: ConfigValidationError) -> NoReturn:
+    """Map config-builder validation errors to the API's 422 detail shape."""
+    detail = exc.detail or "invalid configuration"
+    raise HTTPException(status_code=422, detail=detail)
+
+
+def _artifact_payload(payload: ArtifactPreviewRequest | ArtifactSaveRequest) -> dict[str, Any]:
+    """Normalize once so validation errors use field-level messages."""
+    try:
+        return normalize_config(payload.config)
+    except ConfigValidationError as exc:
+        _artifact_config_errors(exc)
+
+
+@app.get("/api/configs/canonical")
+async def canonical_config_endpoint() -> JSONResponse:
+    """Return the canonical EMRI-C preset with explicit defaults."""
+    return JSONResponse(content=canonical_config())
+
+
+@app.post("/api/configs/preview")
+async def config_preview_endpoint(payload: ArtifactPreviewRequest) -> JSONResponse:
+    """Validate and render deterministic Python/PBS artifacts without writing."""
+    normalized = _artifact_payload(payload)
+    bundle = build_artifacts(normalized)
+    return JSONResponse(
+        content={
+            "config": normalized,
+            "artifacts": bundle.to_dict(),
+            "written_paths": [],
+            "saved": False,
+        }
+    )
+
+
+@app.post("/api/configs/save")
+async def config_save_endpoint(payload: ArtifactSaveRequest) -> JSONResponse:
+    """Validate, render, and write artifacts only to an explicit directory."""
+    normalized = _artifact_payload(payload)
+    bundle = build_artifacts(normalized)
+    try:
+        written_paths = write_artifacts(
+            bundle,
+            payload.artifact_dir,
+            overwrite=payload.overwrite,
+        )
+    except ArtifactConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (ArtifactPathError, ConfigValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return JSONResponse(
+        content={
+            "config": normalized,
+            "artifacts": bundle.to_dict(),
+            "written_paths": written_paths,
+            "saved": True,
+        }
     )
 
 

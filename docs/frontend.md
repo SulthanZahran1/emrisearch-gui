@@ -79,3 +79,11 @@ The frontend intentionally has no heavy scientific Python or plotting stack.
 PNG rendering remains a backend responsibility. The connection endpoint's
 labeled unavailable placeholder is rendered like any other valid PNG when the
 optional bound-statistic dependencies are not installed.
+
+## Config builder
+
+The shell header includes a `config builder` view switch. See
+`docs/config-builder.md` for the request/response contract, the canonical
+EMRI-C preset, deterministic artifact guarantees, safe save semantics, and the
+explicit generate-only execution boundary (no execution, no qsub/sbatch, no
+status or cancellation).
