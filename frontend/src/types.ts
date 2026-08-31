@@ -120,3 +120,26 @@ export interface RunDetail {
   samples: SampleCounts;
   warnings: string[];
 }
+
+export type EMRIConfig = UnknownRecord;
+
+export interface ArtifactFile {
+  filename: string;
+  content: string;
+}
+
+export interface ArtifactBundleResponse {
+  python: ArtifactFile;
+  pbs: ArtifactFile;
+}
+
+export interface ConfigPreviewResponse {
+  config: EMRIConfig;
+  artifacts: ArtifactBundleResponse;
+  written_paths: string[];
+  saved: boolean;
+}
+
+export interface ConfigSaveResponse extends ConfigPreviewResponse {
+  saved: true;
+}

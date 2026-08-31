@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addRun, encodedRunPath, getLineage, getRunDetail, listRuns, ApiError } from "../src/api";
+import {
+  addRun,
+  encodedRunPath,
+  getCanonicalConfig,
+  getLineage,
+  getRunDetail,
+  listRuns,
+  previewConfig,
+  saveConfig,
+  ApiError,
+} from "../src/api";
 import { jsonResponse, makeSummary } from "./fixtures";
 
 function installFetch() {
@@ -68,5 +78,61 @@ describe("API URL and wire contracts", () => {
       },
     });
     expect(JSON.parse(init.body as string)).toEqual({ path: "/scratch/emri/run with spaces" });
+  });
+
+  it("fetches the canonical config preset", async () => {
+    const fetchMock = installFetch();
+    const preset = { source: { preset: "emri_c" }, out: "" };
+    fetchMock.mockResolvedValue(jsonResponse(preset));
+
+    await expect(getCanonicalConfig()).resolves.toEqual(preset);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/configs/canonical");
+  });
+
+  it("previews config artifacts with the config envelope", async () => {
+    const fetchMock = installFetch();
+    const response = {
+      config: { out: "/x" },
+      artifacts: {
+        python: { filename: "run.py", content: "#!/usr/bin/env python3" },
+        pbs: { filename: "run.pbs", content: "#!/bin/bash" },
+      },
+      written_paths: [],
+      saved: false,
+    };
+    fetchMock.mockResolvedValue(jsonResponse(response));
+
+    const config = { out: "/x" };
+    await expect(previewConfig(config)).resolves.toEqual(response);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/configs/preview");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ config });
+  });
+
+  it("saves config artifacts with explicit directory and overwrite opt-in", async () => {
+    const fetchMock = installFetch();
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        config: { out: "/x" },
+        artifacts: {
+          python: { filename: "run.py", content: "x" },
+          pbs: { filename: "run.pbs", content: "y" },
+        },
+        written_paths: ["/srv/run.py", "/srv/run.pbs"],
+        saved: true,
+      }),
+    );
+
+    await saveConfig({ out: "/x" }, "/srv", true);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/configs/save");
+    expect(JSON.parse(init.body as string)).toEqual({
+      config: { out: "/x" },
+      artifact_dir: "/srv",
+      overwrite: true,
+    });
   });
 });

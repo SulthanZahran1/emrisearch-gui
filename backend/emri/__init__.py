@@ -6,6 +6,20 @@ FastAPI, matplotlib, corner, PARIS, or the EMRI waveform stack; the optional
 upstream result loader is attempted only by :mod:`emri.detail`.
 """
 
+from .config_builder import (
+    Artifact,
+    ArtifactBundle,
+    ArtifactConflictError,
+    ArtifactPathError,
+    ConfigValidationError,
+    EMRICConfig,
+    build_artifacts,
+    canonical_config,
+    default_config,
+    generate_config_artifacts,
+    normalize_config,
+    write_artifacts,
+)
 from .detail import (
     LightParamSpace,
     LightRunResult,
@@ -67,6 +81,11 @@ __all__ = [
     "add_run_path",
     # plot requests
     "corner_request", "connection_request",
+    # config artifact generation
+    "Artifact", "ArtifactBundle", "ArtifactConflictError", "ArtifactPathError",
+    "ConfigValidationError", "EMRICConfig", "build_artifacts", "canonical_config",
+    "default_config", "generate_config_artifacts", "normalize_config",
+    "write_artifacts",
     # fixtures
     "make_manifest_run", "make_legacy_run", "make_legacy", "make_run_chain",
     # display/data contracts
