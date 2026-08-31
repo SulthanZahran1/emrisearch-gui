@@ -62,13 +62,21 @@ def _compat_corner_frame(space: Any, title: Any, truth: bool) -> Any:
     The bundled upstream ``corner_frame`` uses two repeated truth rows.  Corner
     2.3 rejects a scaffold with fewer rows than dimensions, so the API keeps the
     same empty-frame recipe but supplies ``ndim + 1`` identical hidden rows.
+    The hidden rows are clipped into the search box: corner's range validation
+    rejects scaffold values outside the locked ranges, which would otherwise
+    rupture the frame whenever the recorded truth sits outside the search box
+    (mis-specified fixture or boundary-hugging real truth).
     """
     import corner
     from emrisearch.plotting.corner_plot import lock_axes
 
     ndim = int(space.ndim)
-    seed = np.atleast_2d(space.truth_search)
-    scaffold = np.repeat(seed, max(ndim + 1, 2), axis=0)
+    boxes = np.asarray(list(space.box), dtype=float).reshape(ndim, 2)
+    centers = (boxes[:, 0] + boxes[:, 1]) / 2.0
+    raw = np.asarray(space.truth_search, dtype=float)
+    seed = np.where(np.isnan(raw), centers, raw)
+    seed = np.clip(seed, boxes[:, 0], boxes[:, 1])
+    scaffold = np.repeat(np.atleast_2d(seed), max(ndim + 1, 2), axis=0)
     fig = corner.corner(
         scaffold,
         labels=list(space.labels),
@@ -108,9 +116,10 @@ def _corner_without_truth(
     title = _corner_title(result, top_n, title)
     try:
         fig = corner_frame(space, title=title, truth=False)
-    except AssertionError:
+    except (AssertionError, ValueError):
         # See _compat_corner_frame: this is only a scaffold-size compatibility
-        # fallback for corner 2.3, not an alternate plotting recipe.
+        # fallback for corner 2.3, not an alternate plotting recipe. It also
+        # clips out-of-box truth so the frame cannot be torn.
         fig = _compat_corner_frame(space, title=title, truth=False)
     labels = [f"{value:.4g}" for value in best.log_densities] if annotate else None
     overplot(fig, space, best.samples, labels=labels)
@@ -164,9 +173,11 @@ def corner_png(detail: Any, request: Any) -> bytes:
                     title=title,
                     annotate=annotate,
                 )
-            except AssertionError:
+            except (AssertionError, ValueError):
                 # The accepted upstream recipe is retained; corner 2.3 needs a
-                # larger hidden scaffold than the upstream helper supplies.
+                # larger hidden scaffold than the upstream helper supplies, and
+                # out-of-box truth must not tear the frame (the compat scaffold
+                # is clipped into the search box).
                 fig = _corner_result_compat(
                     result, space, top_n, title, annotate, truth=True
                 )

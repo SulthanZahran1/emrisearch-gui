@@ -97,3 +97,17 @@ def test_corner_endpoint_returns_exact_not_found_error(client, configure_roots, 
 
     assert response.status_code == 404
     assert response.json() == {"detail": "run not found: unknown"}
+
+
+def test_corner_endpoint_survives_out_of_box_truth(client, plot_run):
+    """Truth outside the search box must not tear the corner frame."""
+    import json
+
+    manifest_path = plot_run / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["source"]["a"] = 0.98  # box hi for a is 0.9 -> out of range
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    for params in ({"truth": "true"}, {"truth": "false"}):
+        response = client.get(_corner_url(), params=params)
+        _assert_png(response)
