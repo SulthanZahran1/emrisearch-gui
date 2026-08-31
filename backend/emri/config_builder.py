@@ -711,12 +711,17 @@ def _normalise_pbs(value: Any, out: str, errors: dict[str, str]) -> dict[str, An
     if not _PYTHON_FILENAME_RE.fullmatch(python_filename):
         errors["pbs.python_filename"] = "must be a simple .py filename without directories"
         python_filename = defaults["python_filename"]
-    output_path = _path(raw.get("output_path", _MISSING), "pbs.output_path", errors, required=False)
-    if not output_path:
+    output_path_raw = raw.get("output_path", _MISSING)
+    if output_path_raw is _MISSING or output_path_raw is None or output_path_raw == "":
+        # Absent or empty output_path follows the config out, exactly like the
+        # preset shape that the frontend sends (canonical preset carries an
+        # empty pbs.output_path that must track the user-filled out value).
         output_path = out
-    if output_path != out:
-        errors["pbs.output_path"] = "must match config out"
-        output_path = out
+    else:
+        output_path = _path(output_path_raw, "pbs.output_path", errors, required=False)
+        if output_path != out:
+            errors["pbs.output_path"] = "must match config out"
+            output_path = out
     return {
         "project": project,
         "job_name": job_name,

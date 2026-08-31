@@ -85,6 +85,21 @@ def test_minimal_config_merges_preset_defaults(client):
     assert response.json()["config"]["pbs"]["project"] == "MY-PROJ"
 
 
+def test_preset_empty_output_path_follows_out(client):
+    """The UI preset carries pbs.output_path=\"\"; it must track a filled out."""
+    payload = canonical_config(out="/scratch/emri/ui-filled")
+    response = client.post("/api/configs/preview", json={"config": payload})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["config"]["pbs"]["output_path"] == "/scratch/emri/ui-filled"
+    assert f"EMRISEARCH_OUT=/scratch/emri/ui-filled" in body["artifacts"]["pbs"]["content"]
+    # A non-matching explicit output_path is still rejected.
+    payload["pbs"]["output_path"] = "/other"
+    response = client.post("/api/configs/preview", json={"config": payload})
+    assert response.status_code == 422, response.text
+    assert "pbs.output_path" in response.json()["detail"]
+
+
 def test_invalid_configs_return_field_qualified_422(client):
     cases = {
         "empty out": _canonical_payload(out=""),
