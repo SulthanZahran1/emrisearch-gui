@@ -643,17 +643,20 @@ def _normalise_sampler(value: Any, errors: dict[str, str]) -> dict[str, Any]:
 
 def _normalise_pbs(value: Any, out: str, errors: dict[str, str]) -> dict[str, Any]:
     defaults = {**_DEFAULT_PBS, "output_path": out}
+    if value is _MISSING:
+        # The whole PBS block is optional: preset defaults fill it entirely.
+        return defaults
     raw = _mapping(value, "pbs", errors)
     _unknown_fields(raw, set(defaults), "pbs", errors)
-    project = _string(raw.get("project", _MISSING), "pbs.project", defaults["project"], errors, required=True)
+    project = _string(raw.get("project", _MISSING), "pbs.project", defaults["project"], errors, required=False)
     if not _PBS_NAME_RE.fullmatch(project):
         errors["pbs.project"] = "must contain only letters, digits, underscore, dot, colon, or hyphen"
         project = defaults["project"]
-    job_name = _string(raw.get("job_name", _MISSING), "pbs.job_name", defaults["job_name"], errors, required=True)
+    job_name = _string(raw.get("job_name", _MISSING), "pbs.job_name", defaults["job_name"], errors, required=False)
     if not _PBS_NAME_RE.fullmatch(job_name):
         errors["pbs.job_name"] = "must contain only letters, digits, underscore, dot, colon, or hyphen"
         job_name = defaults["job_name"]
-    walltime = _string(raw.get("walltime", _MISSING), "pbs.walltime", defaults["walltime"], errors, required=True)
+    walltime = _string(raw.get("walltime", _MISSING), "pbs.walltime", defaults["walltime"], errors, required=False)
     if not _WALLTIME_RE.fullmatch(walltime):
         errors["pbs.walltime"] = "must use HH:MM:SS"
         walltime = defaults["walltime"]
@@ -668,7 +671,7 @@ def _normalise_pbs(value: Any, out: str, errors: dict[str, str]) -> dict[str, An
         "pbs.cuda_module",
         defaults["cuda_module"],
         errors,
-        required=True,
+        required=False,
     )
     if not _PBS_MODULE_RE.fullmatch(cuda_module):
         errors["pbs.cuda_module"] = "must be a safe module name"
@@ -677,7 +680,7 @@ def _normalise_pbs(value: Any, out: str, errors: dict[str, str]) -> dict[str, An
         raw.get("venv_activate", _MISSING),
         "pbs.venv_activate",
         errors,
-        required=True,
+        required=False,
     )
     if not venv_activate:
         venv_activate = defaults["venv_activate"]
@@ -685,7 +688,7 @@ def _normalise_pbs(value: Any, out: str, errors: dict[str, str]) -> dict[str, An
         raw.get("working_directory", _MISSING),
         "pbs.working_directory",
         errors,
-        required=True,
+        required=False,
         allow_pbs_variable=True,
     )
     if not working_directory:
@@ -694,7 +697,7 @@ def _normalise_pbs(value: Any, out: str, errors: dict[str, str]) -> dict[str, An
         raw.get("log_directory", _MISSING),
         "pbs.log_directory",
         errors,
-        required=True,
+        required=False,
     )
     if not log_directory:
         log_directory = defaults["log_directory"]
@@ -703,7 +706,7 @@ def _normalise_pbs(value: Any, out: str, errors: dict[str, str]) -> dict[str, An
         "pbs.python_filename",
         defaults["python_filename"],
         errors,
-        required=True,
+        required=False,
     )
     if not _PYTHON_FILENAME_RE.fullmatch(python_filename):
         errors["pbs.python_filename"] = "must be a simple .py filename without directories"

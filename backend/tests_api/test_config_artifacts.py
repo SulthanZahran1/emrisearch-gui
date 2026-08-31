@@ -60,6 +60,31 @@ def test_preview_creates_no_files(client, tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_minimal_config_merges_preset_defaults(client):
+    """A bare config (only out) uses every preset default, including PBS."""
+    response = client.post(
+        "/api/configs/preview",
+        json={"config": {"out": "/scratch/emri/demo"}},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["saved"] is False
+    assert body["artifacts"]["pbs"]["filename"] == "run_emri_c_semicoherent.pbs"
+    assert body["config"]["pbs"]["project"] == "CFP03-CF-051"
+    # Explicitly-supplied PBS values still win over defaults.
+    response = client.post(
+        "/api/configs/preview",
+        json={
+            "config": {
+                "out": "/scratch/emri/demo",
+                "pbs": {"project": "MY-PROJ"},
+            }
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["config"]["pbs"]["project"] == "MY-PROJ"
+
+
 def test_invalid_configs_return_field_qualified_422(client):
     cases = {
         "empty out": _canonical_payload(out=""),
